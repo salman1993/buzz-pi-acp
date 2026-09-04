@@ -61,6 +61,10 @@ type AdvertisedModel = {
 const MODEL_CONFIG_ID = 'model'
 const THOUGHT_LEVEL_CONFIG_ID = 'thought_level'
 
+export type PiAcpAgentConfig = {
+  skillPaths?: string[]
+}
+
 function builtinAvailableCommands(): AvailableCommand[] {
   return [
     {
@@ -125,6 +129,7 @@ export class PiAcpAgent implements ACPAgent {
   private readonly sessions = new SessionManager()
   private readonly store = new SessionStore()
   private readonly restoringSessions = new Map<string, Promise<PiAcpSession>>()
+  private readonly skillPaths: string[]
 
   dispose(): void {
     this.sessions.disposeAll()
@@ -133,9 +138,9 @@ export class PiAcpAgent implements ACPAgent {
   // Remember recent session cwd and use it as the default filter.
   private lastSessionCwd: string | null = null
 
-  constructor(conn: AgentSideConnection, _config?: unknown) {
+  constructor(conn: AgentSideConnection, config: PiAcpAgentConfig = {}) {
     this.conn = conn
-    void _config
+    this.skillPaths = [...(config.skillPaths ?? [])]
   }
 
   private cleanupFailedNewSession(sessionId: string, state?: any | null): void {
@@ -201,7 +206,8 @@ export class PiAcpAgent implements ACPAgent {
         proc = await PiRpcProcess.spawn({
           cwd,
           sessionPath: stored.sessionFile,
-          piCommand: process.env.PI_ACP_PI_COMMAND
+          piCommand: process.env.PI_ACP_PI_COMMAND,
+          ...(this.skillPaths.length > 0 ? { skillPaths: this.skillPaths } : {})
         })
       } catch (e: any) {
         if (e?.name === 'PiRpcSpawnError') {
@@ -285,7 +291,8 @@ export class PiAcpAgent implements ACPAgent {
       mcpServers: params.mcpServers,
       conn: this.conn,
       fileCommands,
-      piCommand: process.env.PI_ACP_PI_COMMAND
+      piCommand: process.env.PI_ACP_PI_COMMAND,
+      ...(this.skillPaths.length > 0 ? { skillPaths: this.skillPaths } : {})
     })
 
     // Fetch state + models once (parallel) to reduce startup latency.

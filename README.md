@@ -130,6 +130,16 @@ You can add the environment variable in the Zed settings with:
   }
 ```
 
+### Additional skill paths
+
+Pass `--skill <path>` to add a skill file or directory to every Pi session started by the adapter. The option is repeatable, directories are scanned recursively by Pi, and relative paths resolve from the ACP session working directory:
+
+```bash
+pi-acp --skill .agents/skills/ --skill /path/to/another/SKILL.md
+```
+
+Explicit skill paths are loaded without relying on Pi's project-trust decision. ACP clients should therefore only configure paths they control.
+
 ### Slash commands
 
 `pi-acp` supports slash commands:

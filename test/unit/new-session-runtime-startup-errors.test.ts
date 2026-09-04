@@ -9,10 +9,12 @@ import { FakeAgentSideConnection, asAgentConn } from '../helpers/fakes.js'
 
 class FakeSessions {
   closeCalls: string[] = []
+  createCalls: any[] = []
 
   constructor(private readonly session: any) {}
 
-  async create() {
+  async create(params: any) {
+    this.createCalls.push(params)
     return this.session
   }
 
@@ -56,7 +58,7 @@ test('PiAcpAgent: newSession returns AUTH_REQUIRED when pi reports an auth error
   const sessions = new FakeSessions(session)
   const store = new SessionStore(sessionMapPath)
   store.upsert({ sessionId: 's-auth', cwd: process.cwd(), sessionFile })
-  const agent = new PiAcpAgent(asAgentConn(conn), {} as any)
+  const agent = new PiAcpAgent(asAgentConn(conn), { skillPaths: ['.agents/skills/'] })
   ;(agent as any).sessions = sessions as any
   ;(agent as any).store = store as any
 
@@ -66,6 +68,7 @@ test('PiAcpAgent: newSession returns AUTH_REQUIRED when pi reports an auth error
   )
 
   assert.deepEqual(sessions.closeCalls, ['s-auth'])
+  assert.deepEqual(sessions.createCalls[0]?.skillPaths, ['.agents/skills/'])
   assert.equal(existsSync(sessionFile), false)
   assert.equal(store.get('s-auth'), null)
 })

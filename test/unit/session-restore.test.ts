@@ -53,7 +53,7 @@ test('PiAcpAgent: prompt auto-restores a missing session from SessionStore', asy
   }
 
   try {
-    const agent = new PiAcpAgent(asAgentConn(conn), {} as any)
+    const agent = new PiAcpAgent(asAgentConn(conn), { skillPaths: ['.agents/skills/'] })
     ;(agent as any).sessions = sessions as any
     ;(agent as any).store = {
       get(sessionId: string) {
@@ -80,7 +80,8 @@ test('PiAcpAgent: prompt auto-restores a missing session from SessionStore', asy
       {
         cwd: '/tmp/store-project',
         sessionPath: '/tmp/store-project/session.jsonl',
-        piCommand: process.env.PI_ACP_PI_COMMAND
+        piCommand: process.env.PI_ACP_PI_COMMAND,
+        skillPaths: ['.agents/skills/']
       }
     ])
     assert.deepEqual(promptCalls, [{ message: 'hello again', images: [] }])
