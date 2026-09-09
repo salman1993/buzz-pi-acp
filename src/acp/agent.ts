@@ -27,6 +27,7 @@ import { getAuthMethods } from './auth.js'
 import { SessionManager, type PiAcpSession } from './session.js'
 import { SessionStore, type StoredSession } from './session-store.js'
 import { parseSystemPrompt } from './system-prompt.js'
+import { sanitizeSessionTitle } from './session-title.js'
 import { PiRpcProcess } from '../pi-rpc/process.js'
 import { listPiSessions, findPiSession } from './pi-sessions.js'
 import { normalizePiAssistantText, normalizePiMessageText } from './translate/pi-messages.js'
@@ -158,10 +159,17 @@ export class PiAcpAgent implements ACPAgent {
     this.store.delete(sessionId)
   }
 
-  private findStoredSession(sessionId: string): Pick<StoredSession, 'cwd' | 'sessionFile' | 'systemPrompt'> | null {
+  private findStoredSession(
+    sessionId: string
+  ): Pick<StoredSession, 'cwd' | 'sessionFile' | 'systemPrompt' | 'sessionTitle'> | null {
     const stored = this.store.get(sessionId)
     if (stored?.cwd && stored?.sessionFile) {
-      return { cwd: stored.cwd, sessionFile: stored.sessionFile, systemPrompt: stored.systemPrompt }
+      return {
+        cwd: stored.cwd,
+        sessionFile: stored.sessionFile,
+        systemPrompt: stored.systemPrompt,
+        sessionTitle: stored.sessionTitle
+      }
     }
 
     const piSession = findPiSession(sessionId)
@@ -196,6 +204,7 @@ export class PiAcpAgent implements ACPAgent {
       }
 
       const cwd = opts?.cwd ?? stored.cwd
+      const restoreUnflushedTitle = stored.sessionTitle && !existsSync(stored.sessionFile)
 
       let proc: PiRpcProcess
       try {
@@ -210,6 +219,15 @@ export class PiAcpAgent implements ACPAgent {
           throw RequestError.internalError({ code: e?.code }, String(e?.message ?? e))
         }
         throw e
+      }
+
+      if (restoreUnflushedTitle) {
+        try {
+          await proc.setSessionName(stored.sessionTitle!)
+        } catch (error) {
+          proc.dispose()
+          throw error
+        }
       }
 
       const fileCommands = loadSlashCommands(cwd)
@@ -254,7 +272,7 @@ export class PiAcpAgent implements ACPAgent {
         supportsTerminalAuthMeta: (params as any)?.clientCapabilities?._meta?.['terminal-auth'] === true
       }),
       agentCapabilities: {
-        _meta: { piAcp: { systemPrompt: { replace: true, append: true, persisted: true } } },
+        _meta: { piAcp: { systemPrompt: { replace: true, append: true, persisted: true }, sessionTitle: true } },
         loadSession: true,
         mcpCapabilities: { http: false, sse: false },
         promptCapabilities: {
@@ -274,6 +292,7 @@ export class PiAcpAgent implements ACPAgent {
 
   async newSession(params: NewSessionRequest) {
     const systemPrompt = parseSystemPrompt(params._meta?.systemPrompt)
+    const sessionTitle = sanitizeSessionTitle(params._meta?.sessionTitle)
     if (!isAbsolute(params.cwd)) {
       throw RequestError.invalidParams(`cwd must be an absolute path: ${params.cwd}`)
     }
@@ -351,6 +370,18 @@ export class PiAcpAgent implements ACPAgent {
       )
     }
 
+    if (sessionTitle) {
+      try {
+        await session.proc.setSessionName(sessionTitle)
+        const stored = this.store.get(session.sessionId)
+        if (!stored) throw new Error('Cannot persist session title: session record is missing')
+        this.store.upsert({ ...stored, sessionTitle })
+      } catch (error) {
+        this.cleanupFailedNewSession(session.sessionId, state)
+        throw RequestError.internalError({}, `Failed to set session title: ${String(error)}`)
+      }
+    }
+
     const { configOptions, models, modes } = await getSessionConfiguration(session.proc, {
       state,
       availableModels
@@ -403,6 +434,12 @@ export class PiAcpAgent implements ACPAgent {
     setTimeout(() => {
       void (async () => {
         try {
+          if (sessionTitle) {
+            await this.conn.sessionUpdate({
+              sessionId: session.sessionId,
+              update: { sessionUpdate: 'session_info_update', title: sessionTitle }
+            })
+          }
           const pi = (await session.proc.getCommands()) as any
           const { commands } = toAvailableCommandsFromPiGetCommands(pi, {
             enableSkillCommands,

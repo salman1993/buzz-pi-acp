@@ -184,6 +184,35 @@ extensions may modify the resulting prompt. Replacement overrides Pi's default
 base or discovered `SYSTEM.md`; explicit append follows Pi's CLI precedence and
 supersedes automatic `APPEND_SYSTEM.md` discovery. It does not replace the base.
 
+### Client session titles
+
+Clients can name a new session with `session/new.params._meta.sessionTitle`:
+
+```json
+{
+  "cwd": "/absolute/workspace",
+  "mcpServers": [],
+  "_meta": {
+    "sessionTitle": "Fix the login bug",
+    "systemPrompt": { "append": "Explain your changes concisely." }
+  }
+}
+```
+
+The adapter collapses whitespace and trims the title. Titles longer than 256
+characters are shortened to 255 characters plus `…`. Missing, non-string, and
+blank values are ignored. Support is advertised through
+`agentCapabilities._meta.piAcp.sessionTitle: true`.
+
+The title is applied through Pi's `set_session_name` RPC before `session/new`
+returns, then announced through `session_info_update`. If naming fails, session
+creation fails and the new session is cleaned up. Pi saves titles in its
+transcript. Because Pi defers creating that file until a response is saved, the
+adapter also keeps the initial title in its session map and reapplies it when
+restoring a session whose transcript does not yet exist. Existing transcripts
+retain their current name, including later renames. `session/load` does
+not apply `_meta.sessionTitle`; use `/name` to rename an existing session.
+
 ### Slash commands
 
 `pi-acp` supports slash commands:
