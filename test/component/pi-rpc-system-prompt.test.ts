@@ -31,28 +31,26 @@ readline.createInterface({ input: process.stdin }).on('line', line => {
 `,
       { mode: 0o700 }
     )
-    for (const mode of ['replace', 'append'] as const) {
-      const text = '/etc/hosts\nLiteral $HOME and "quotes"'
-      const proc = await PiRpcProcess.spawn({ cwd: root, piCommand: executable, systemPrompt: { mode, text } })
-      const args = JSON.parse(readFileSync(join(root, 'args.json'), 'utf-8')) as string[]
-      const path = args.at(-1)!
-      try {
-        assert.equal(args.at(-2), mode === 'replace' ? '--system-prompt' : '--append-system-prompt')
-        assert.equal(readFileSync(path, 'utf-8'), text)
-        assert.ok(!args.includes(text))
-      } finally {
-        proc.dispose()
-      }
-      for (let attempt = 0; existsSync(path) && attempt < 100; attempt++) {
-        await new Promise(resolve => setTimeout(resolve, 10))
-      }
-      assert.equal(existsSync(path), false)
+    const text = '/etc/hosts\nLiteral $HOME and "quotes"'
+    const proc = await PiRpcProcess.spawn({ cwd: root, piCommand: executable, systemPrompt: text })
+    const args = JSON.parse(readFileSync(join(root, 'args.json'), 'utf-8')) as string[]
+    const path = args.at(-1)!
+    try {
+      assert.equal(args.at(-2), '--system-prompt')
+      assert.equal(readFileSync(path, 'utf-8'), text)
+      assert.ok(!args.includes(text))
+    } finally {
+      proc.dispose()
     }
+    for (let attempt = 0; existsSync(path) && attempt < 100; attempt++) {
+      await new Promise(resolve => setTimeout(resolve, 10))
+    }
+    assert.equal(existsSync(path), false)
     await assert.rejects(
       PiRpcProcess.spawn({
         cwd: root,
         piCommand: join(root, 'missing-executable'),
-        systemPrompt: { mode: 'replace', text: 'instructions' }
+        systemPrompt: 'instructions'
       }),
       { name: 'PiRpcSpawnError', code: 'ENOENT' }
     )
@@ -64,7 +62,7 @@ readline.createInterface({ input: process.stdin }).on('line', line => {
 )
 
 test(
-  'real Pi exports replacement and append from adapter spawn flags without model calls',
+  'real Pi exports the replacement from adapter spawn flags without model calls',
   {
     skip: process.env.PI_ACP_TEST_REAL_PI !== '1' || process.platform === 'win32'
   },
@@ -99,26 +97,23 @@ test(
         .map(entry => JSON.stringify(entry))
         .join('\n') + '\n'
     )
-    for (const mode of ['replace', 'append'] as const) {
-      const marker = 'ACP_NATIVE_SYSTEM_PROMPT_TEST'
-      const proc = await PiRpcProcess.spawn({
-        cwd: root,
-        piCommand: executable,
-        sessionPath,
-        systemPrompt: { mode, text: marker }
-      })
-      try {
-        const output = join(root, `${mode}.html`)
-        await proc.exportHtml(output)
-        const html = readFileSync(output, 'utf-8')
-        const encoded = html.match(/<script id="session-data"[^>]*>([\s\S]*?)<\/script>/)?.[1]
-        assert.ok(encoded)
-        const data = JSON.parse(Buffer.from(encoded.trim(), 'base64').toString('utf-8')) as { systemPrompt: string }
-        assert.equal(data.systemPrompt.split(marker).length - 1, 1)
-        assert.equal(data.systemPrompt.includes('You are an expert coding assistant'), mode === 'append')
-      } finally {
-        proc.dispose()
-      }
+    const marker = 'ACP_NATIVE_SYSTEM_PROMPT_TEST'
+    const proc = await PiRpcProcess.spawn({
+      cwd: root,
+      piCommand: executable,
+      sessionPath,
+      systemPrompt: marker
+    })
+    try {
+      const output = join(root, 'replace.html')
+      await proc.exportHtml(output)
+      const html = readFileSync(output, 'utf-8')
+      const encoded = html.match(/<script id="session-data"[^>]*>([\s\S]*?)<\/script>/)?.[1]
+      assert.ok(encoded)
+      const data = JSON.parse(Buffer.from(encoded.trim(), 'base64').toString('utf-8')) as { systemPrompt: string }
+      assert.equal(data.systemPrompt, marker)
+    } finally {
+      proc.dispose()
     }
   }
 )

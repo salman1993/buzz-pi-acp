@@ -1,7 +1,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import * as readline from 'node:readline'
 import { getPiCommand, shouldUseShellForPiCommand } from './command.js'
-import { prepareSystemPrompt, type SystemPrompt } from './system-prompt.js'
+import { prepareSystemPrompt } from './system-prompt.js'
 
 export class PiRpcSpawnError extends Error {
   /** Underlying spawn error code, e.g. ENOENT, EACCES */
@@ -75,7 +75,7 @@ type SpawnParams = {
   piCommand?: string
   /** If set, pi will persist the session to this exact file (via `--session <path>`). */
   sessionPath?: string
-  systemPrompt?: SystemPrompt
+  systemPrompt?: string
   piArgs?: readonly string[]
 }
 

@@ -14,7 +14,6 @@ import { isAbsolute, resolve as resolvePath } from 'node:path'
 import { PiRpcProcess, PiRpcSpawnError, type PiRpcEvent } from '../pi-rpc/process.js'
 import { maybeAuthRequiredError } from './auth-required.js'
 import { SessionStore } from './session-store.js'
-import type { SystemPrompt } from '../pi-rpc/system-prompt.js'
 import { expandSlashCommand, type FileSlashCommand } from './slash-commands.js'
 import {
   bashCommand,
@@ -36,7 +35,7 @@ type SessionCreateParams = {
   fileCommands?: import('./slash-commands.js').FileSlashCommand[]
   piCommand?: string
   piArgs?: readonly string[]
-  systemPrompt?: SystemPrompt
+  systemPrompt?: string
 }
 
 export type StopReason = 'end_turn' | 'cancelled' | 'error'

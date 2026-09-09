@@ -126,7 +126,7 @@ test(
       const result = await client.rpc('session/new', {
         cwd,
         mcpServers: [],
-        _meta: { systemPrompt: 'Session prompt fixture' }
+        systemPrompt: 'Session prompt fixture'
       })
       const sessionId = result.sessionId
       assert.equal(typeof sessionId, 'string')

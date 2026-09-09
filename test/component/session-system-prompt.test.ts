@@ -41,33 +41,30 @@ test('client prompts survive A/B switching, explicit load, and adapter restart',
   }
   const agent = createAgent()
   const initialized = await agent.initialize({ protocolVersion: 1, clientCapabilities: {} })
-  assert.deepEqual(initialized.agentCapabilities?._meta, {
-    piAcp: { systemPrompt: { replace: true, append: true, persisted: true }, sessionTitle: true }
-  })
-  await assert.rejects(agent.newSession({ cwd: root, mcpServers: [], _meta: { systemPrompt: null } }), { code: -32602 })
+  assert.equal(initialized.agentCapabilities?._meta, undefined)
+  await assert.rejects(
+    agent.newSession({ cwd: root, mcpServers: [], systemPrompt: null } as Parameters<typeof agent.newSession>[0]),
+    { code: -32602 }
+  )
   assert.equal(calls.length, 0)
   const a = await agent.newSession({
     cwd: root,
     mcpServers: [],
-    _meta: { systemPrompt: 'prompt A', sessionTitle: 'A' }
-  })
-  await agent.newSession({ cwd: root, mcpServers: [], _meta: { systemPrompt: { append: 'prompt B' } } })
-  assert.equal(disposed, 1)
+    systemPrompt: 'prompt A',
+    _meta: { sessionTitle: 'A' }
+  } as Parameters<typeof agent.newSession>[0])
+  assert.equal(disposed, 0)
   await agent.setSessionMode({ sessionId: a.sessionId, modeId: 'medium' })
   assert.deepEqual(
     calls.map(call => call.systemPrompt),
-    [
-      { mode: 'replace', text: 'prompt A' },
-      { mode: 'append', text: 'prompt B' },
-      { mode: 'replace', text: 'prompt A' }
-    ]
+    ['prompt A']
   )
   agent.dispose()
   const restarted = createAgent()
   await restarted.loadSession({ cwd: root, sessionId: a.sessionId, mcpServers: [] })
-  assert.deepEqual(calls.at(-1)?.systemPrompt, { mode: 'replace', text: 'prompt A' })
+  assert.equal(calls.at(-1)?.systemPrompt, 'prompt A')
   assert.ok(calls.every(call => JSON.stringify(call.piArgs) === JSON.stringify(['--skill', '/launch skills'])))
-  assert.deepEqual(new SessionStore(path).get('a')?.systemPrompt, { mode: 'replace', text: 'prompt A' })
+  assert.equal(new SessionStore(path).get('a')?.systemPrompt, 'prompt A')
   await restarted.deleteSession({ sessionId: a.sessionId })
   assert.equal(new SessionStore(path).get('a'), null)
   await new Promise(resolve => setTimeout(resolve, 10))

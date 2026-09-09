@@ -29,13 +29,13 @@ Run the same install command again to update the adapter.
 
 ### Client system prompts
 
-Buzz can replace or extend Pi's system prompt through `session/new.params._meta.systemPrompt`:
+Buzz can replace Pi's system prompt through the provisional `session/new.params.systemPrompt` field:
 
 ```json
-{ "_meta": { "systemPrompt": { "append": "Follow this agent's instructions." } } }
+{ "systemPrompt": "Follow this agent's instructions." }
 ```
 
-The adapter preserves the prompt when Buzz reloads or restores the session.
+The value must be a nonempty string. It is not advertised during capability negotiation. The adapter preserves the prompt when Buzz reloads or restores the session.
 
 ### Forwarding Pi launch options
 
