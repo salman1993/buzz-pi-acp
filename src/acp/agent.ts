@@ -274,7 +274,6 @@ export class PiAcpAgent implements ACPAgent {
         supportsTerminalAuthMeta: (params as any)?.clientCapabilities?._meta?.['terminal-auth'] === true
       }),
       agentCapabilities: {
-        _meta: { piAcp: { sessionTitle: true } },
         loadSession: true,
         mcpCapabilities: { http: false, sse: false },
         promptCapabilities: {

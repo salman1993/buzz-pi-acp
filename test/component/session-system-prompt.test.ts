@@ -41,9 +41,7 @@ test('client prompts survive A/B switching, explicit load, and adapter restart',
   }
   const agent = createAgent()
   const initialized = await agent.initialize({ protocolVersion: 1, clientCapabilities: {} })
-  assert.deepEqual(initialized.agentCapabilities?._meta, {
-    piAcp: { sessionTitle: true }
-  })
+  assert.equal(initialized.agentCapabilities?._meta, undefined)
   await assert.rejects(
     agent.newSession({ cwd: root, mcpServers: [], systemPrompt: null } as Parameters<typeof agent.newSession>[0]),
     { code: -32602 }
