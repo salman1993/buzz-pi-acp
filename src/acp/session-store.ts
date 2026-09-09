@@ -9,6 +9,7 @@ export type StoredSession = {
   sessionFile: string
   updatedAt: string
   systemPrompt?: SystemPrompt
+  sessionTitle?: string
 }
 
 type SessionMapFile = {
@@ -51,14 +52,22 @@ export class SessionStore {
     return db.sessions[sessionId] ?? null
   }
 
-  upsert(entry: { sessionId: string; cwd: string; sessionFile: string; systemPrompt?: SystemPrompt }): void {
+  upsert(entry: {
+    sessionId: string
+    cwd: string
+    sessionFile: string
+    systemPrompt?: SystemPrompt
+    sessionTitle?: string
+  }): void {
     const db = loadFile(this.path)
     const systemPrompt = entry.systemPrompt ?? db.sessions[entry.sessionId]?.systemPrompt
+    const sessionTitle = entry.sessionTitle ?? db.sessions[entry.sessionId]?.sessionTitle
     db.sessions[entry.sessionId] = {
       sessionId: entry.sessionId,
       cwd: entry.cwd,
       sessionFile: entry.sessionFile,
       ...(systemPrompt ? { systemPrompt } : {}),
+      ...(sessionTitle ? { sessionTitle } : {}),
       updatedAt: new Date().toISOString()
     }
     saveFile(this.path, db)

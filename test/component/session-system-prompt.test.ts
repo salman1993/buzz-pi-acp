@@ -27,6 +27,7 @@ test('client prompts survive A/B switching, explicit load, and adapter restart',
         disposed++
       }
       async setThinkingLevel() {}
+      async setSessionName() {}
     }
     return new Process() as unknown as PiRpcProcess
   })
@@ -41,7 +42,7 @@ test('client prompts survive A/B switching, explicit load, and adapter restart',
   const agent = createAgent()
   const initialized = await agent.initialize({ protocolVersion: 1, clientCapabilities: {} })
   assert.deepEqual(initialized.agentCapabilities?._meta, {
-    piAcp: { systemPrompt: { replace: true, append: true, persisted: true } }
+    piAcp: { systemPrompt: { replace: true, append: true, persisted: true }, sessionTitle: true }
   })
   await assert.rejects(agent.newSession({ cwd: root, mcpServers: [], _meta: { systemPrompt: null } }), { code: -32602 })
   assert.equal(calls.length, 0)
