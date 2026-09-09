@@ -62,7 +62,7 @@ test('new session titles are applied, announced, restored before flush, and do n
   } as Parameters<typeof agent.newSession>[0])
   assert.deepEqual(names, ['Fix the login bug'])
   assert.equal(store.get(a.sessionId)?.sessionTitle, 'Fix the login bug')
-  assert.deepEqual(store.get(a.sessionId)?.systemPrompt, { mode: 'replace', text: 'instructions' })
+  assert.equal(store.get(a.sessionId)?.systemPrompt, 'instructions')
   await new Promise(resolve => setTimeout(resolve, 10))
   assert.ok(
     conn.updates.some(

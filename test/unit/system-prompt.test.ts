@@ -9,7 +9,7 @@ import { prepareSystemPrompt } from '../../src/pi-rpc/system-prompt.js'
 
 test('system prompt request accepts only a nonempty replacement string', () => {
   assert.equal(parseSystemPrompt(undefined), undefined)
-  assert.deepEqual(parseSystemPrompt('  instructions\n'), { mode: 'replace', text: '  instructions\n' })
+  assert.equal(parseSystemPrompt('  instructions\n'), '  instructions\n')
   for (const value of [
     null,
     '',
@@ -29,19 +29,17 @@ test('system prompt request accepts only a nonempty replacement string', () => {
 })
 
 test('prompt files preserve literal paths, multiline text, and large prompts without putting text in argv', () => {
-  for (const mode of ['replace', 'append'] as const) {
-    const text = '/etc/hosts\n"quotes" $HOME `literal`\n' + 'large prompt '.repeat(20000)
-    const prepared = prepareSystemPrompt({ mode, text })
-    const path = prepared.args[1]
-    try {
-      assert.equal(prepared.args[0], mode === 'replace' ? '--system-prompt' : '--append-system-prompt')
-      assert.equal(readFileSync(path, 'utf-8'), text)
-      if (process.platform !== 'win32') assert.equal(statSync(path).mode & 0o777, 0o600)
-    } finally {
-      prepared.dispose()
-    }
-    assert.equal(existsSync(path), false)
+  const text = '/etc/hosts\n"quotes" $HOME `literal`\n' + 'large prompt '.repeat(20000)
+  const prepared = prepareSystemPrompt(text)
+  const path = prepared.args[1]
+  try {
+    assert.equal(prepared.args[0], '--system-prompt')
+    assert.equal(readFileSync(path, 'utf-8'), text)
+    if (process.platform !== 'win32') assert.equal(statSync(path).mode & 0o777, 0o600)
+  } finally {
+    prepared.dispose()
   }
+  assert.equal(existsSync(path), false)
   assert.deepEqual(prepareSystemPrompt().args, [])
 })
 
@@ -52,13 +50,13 @@ test('session prompt snapshots survive store recreation and metadata updates, an
     const store = new SessionStore(path)
     const a = { sessionId: 'a', cwd: root, sessionFile: join(root, 'a.jsonl') }
     const b = { sessionId: 'b', cwd: root, sessionFile: join(root, 'b.jsonl') }
-    const systemPrompt = { mode: 'replace', text: 'A' } as const
+    const systemPrompt = 'A'
     store.upsert({ ...a, systemPrompt })
-    store.upsert({ ...b, systemPrompt: { mode: 'append', text: 'B' } })
+    store.upsert({ ...b, systemPrompt: 'B' })
     const reopened = new SessionStore(path)
     reopened.upsert(a)
     assert.deepEqual(reopened.get('a')?.systemPrompt, systemPrompt)
-    assert.deepEqual(reopened.get('b')?.systemPrompt, { mode: 'append', text: 'B' })
+    assert.equal(reopened.get('b')?.systemPrompt, 'B')
     if (process.platform !== 'win32') assert.equal(statSync(path).mode & 0o777, 0o600)
     reopened.delete('a')
     assert.equal(reopened.get('a'), null)

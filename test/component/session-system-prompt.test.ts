@@ -59,14 +59,14 @@ test('client prompts survive A/B switching, explicit load, and adapter restart',
   await agent.setSessionMode({ sessionId: a.sessionId, modeId: 'medium' })
   assert.deepEqual(
     calls.map(call => call.systemPrompt),
-    [{ mode: 'replace', text: 'prompt A' }]
+    ['prompt A']
   )
   agent.dispose()
   const restarted = createAgent()
   await restarted.loadSession({ cwd: root, sessionId: a.sessionId, mcpServers: [] })
-  assert.deepEqual(calls.at(-1)?.systemPrompt, { mode: 'replace', text: 'prompt A' })
+  assert.equal(calls.at(-1)?.systemPrompt, 'prompt A')
   assert.ok(calls.every(call => JSON.stringify(call.piArgs) === JSON.stringify(['--skill', '/launch skills'])))
-  assert.deepEqual(new SessionStore(path).get('a')?.systemPrompt, { mode: 'replace', text: 'prompt A' })
+  assert.equal(new SessionStore(path).get('a')?.systemPrompt, 'prompt A')
   await restarted.deleteSession({ sessionId: a.sessionId })
   assert.equal(new SessionStore(path).get('a'), null)
   await new Promise(resolve => setTimeout(resolve, 10))

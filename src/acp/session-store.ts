@@ -1,14 +1,13 @@
 import { chmodSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { getPiAcpSessionMapPath } from './paths.js'
-import type { SystemPrompt } from '../pi-rpc/system-prompt.js'
 
 export type StoredSession = {
   sessionId: string
   cwd: string
   sessionFile: string
   updatedAt: string
-  systemPrompt?: SystemPrompt
+  systemPrompt?: string
   sessionTitle?: string
 }
 
@@ -56,7 +55,7 @@ export class SessionStore {
     sessionId: string
     cwd: string
     sessionFile: string
-    systemPrompt?: SystemPrompt
+    systemPrompt?: string
     sessionTitle?: string
   }): void {
     const db = loadFile(this.path)

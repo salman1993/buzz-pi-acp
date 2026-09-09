@@ -1,10 +1,9 @@
 import { RequestError } from '@agentclientprotocol/sdk'
-import type { SystemPrompt } from '../pi-rpc/system-prompt.js'
 
-export function parseSystemPrompt(value: unknown): SystemPrompt | undefined {
+export function parseSystemPrompt(value: unknown): string | undefined {
   if (value === undefined) return undefined
   if (typeof value === 'string' && value.trim().length > 0) {
-    return { mode: 'replace', text: value }
+    return value
   }
   throw RequestError.invalidParams('systemPrompt must be a nonempty string')
 }
