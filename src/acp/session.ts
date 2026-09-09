@@ -35,6 +35,7 @@ type SessionCreateParams = {
   conn: AgentSideConnection
   fileCommands?: import('./slash-commands.js').FileSlashCommand[]
   piCommand?: string
+  piArgs?: readonly string[]
   systemPrompt?: SystemPrompt
 }
 
@@ -194,6 +195,7 @@ export class SessionManager {
       proc = await PiRpcProcess.spawn({
         cwd: params.cwd,
         piCommand: params.piCommand,
+        ...(params.piArgs?.length ? { piArgs: params.piArgs } : {}),
         ...(params.systemPrompt ? { systemPrompt: params.systemPrompt } : {})
       })
     } catch (e) {

@@ -123,6 +123,7 @@ const pkg = readNearestPackageJson(import.meta.url)
 
 export class PiAcpAgent implements ACPAgent {
   private readonly conn: AgentSideConnection
+  private readonly piArgs: readonly string[]
   private readonly sessions = new SessionManager()
   private readonly store = new SessionStore()
   private readonly restoringSessions = new Map<string, Promise<PiAcpSession>>()
@@ -134,9 +135,9 @@ export class PiAcpAgent implements ACPAgent {
   // Remember recent session cwd and use it as the default filter.
   private lastSessionCwd: string | null = null
 
-  constructor(conn: AgentSideConnection, _config?: unknown) {
+  constructor(conn: AgentSideConnection, config?: { piArgs?: readonly string[] }) {
     this.conn = conn
-    void _config
+    this.piArgs = [...(config?.piArgs ?? [])]
   }
 
   private cleanupFailedNewSession(sessionId: string, state?: any | null): void {
@@ -203,6 +204,7 @@ export class PiAcpAgent implements ACPAgent {
           cwd,
           sessionPath: stored.sessionFile,
           piCommand: process.env.PI_ACP_PI_COMMAND,
+          ...(this.piArgs.length ? { piArgs: this.piArgs } : {}),
           ...(stored.systemPrompt ? { systemPrompt: stored.systemPrompt } : {})
         })
       } catch (e: any) {
@@ -290,6 +292,7 @@ export class PiAcpAgent implements ACPAgent {
       conn: this.conn,
       fileCommands,
       piCommand: process.env.PI_ACP_PI_COMMAND,
+      ...(this.piArgs.length ? { piArgs: this.piArgs } : {}),
       ...(systemPrompt ? { systemPrompt } : {})
     })
 

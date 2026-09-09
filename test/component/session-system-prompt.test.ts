@@ -31,7 +31,7 @@ test('client prompts survive A/B switching, explicit load, and adapter restart',
     return new Process() as unknown as PiRpcProcess
   })
   function createAgent() {
-    const agent = new PiAcpAgent(asAgentConn(new FakeAgentSideConnection()))
+    const agent = new PiAcpAgent(asAgentConn(new FakeAgentSideConnection()), { piArgs: ['--skill', '/launch skills'] })
     const internals = agent as unknown as { store: SessionStore; sessions: SessionManager }
     internals.store = new SessionStore(path)
     ;(internals.sessions as unknown as { store: SessionStore }).store = new SessionStore(path)
@@ -65,6 +65,7 @@ test('client prompts survive A/B switching, explicit load, and adapter restart',
   const restarted = createAgent()
   await restarted.loadSession({ cwd: root, sessionId: a.sessionId, mcpServers: [] })
   assert.deepEqual(calls.at(-1)?.systemPrompt, { mode: 'replace', text: 'prompt A' })
+  assert.ok(calls.every(call => JSON.stringify(call.piArgs) === JSON.stringify(['--skill', '/launch skills'])))
   assert.deepEqual(new SessionStore(path).get('a')?.systemPrompt, { mode: 'replace', text: 'prompt A' })
   await restarted.deleteSession({ sessionId: a.sessionId })
   assert.equal(new SessionStore(path).get('a'), null)
