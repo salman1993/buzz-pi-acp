@@ -1,7 +1,9 @@
 node_modules
 .dist
 .dist-cache
-dist
+dist/*
+!dist/index.js
+!dist/index.js.map
 *.log
 
 # ESLint cache
