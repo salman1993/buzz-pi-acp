@@ -76,6 +76,7 @@ type SpawnParams = {
   /** If set, pi will persist the session to this exact file (via `--session <path>`). */
   sessionPath?: string
   systemPrompt?: SystemPrompt
+  piArgs?: readonly string[]
 }
 
 export class PiRpcProcess {
@@ -138,6 +139,7 @@ export class PiRpcProcess {
     // (e.g. MCP extensions, prompt templates for workflows).
     const args = ['--mode', 'rpc', '--no-themes']
     if (params.sessionPath) args.push('--session', params.sessionPath)
+    args.push(...(params.piArgs ?? []))
     const prompt = prepareSystemPrompt(params.systemPrompt)
     args.push(...prompt.args)
     let child: ChildProcessWithoutNullStreams

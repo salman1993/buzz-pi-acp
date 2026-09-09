@@ -130,6 +130,35 @@ You can add the environment variable in the Zed settings with:
   }
 ```
 
+### Forwarding Pi launch options
+
+Put Pi options after `--` in the adapter's launch arguments. For example, a client
+can load an additional skill directory with:
+
+```json
+{
+  "command": "pi-acp",
+  "args": ["--", "--skill", "/absolute/workspace/.agents/skills"]
+}
+```
+
+Use an absolute path so discovery does not depend on the session's working
+directory. Paths with spaces remain a single JSON argument. Repeat `--skill` to
+load multiple directories. Pi keeps its normal skill discovery enabled unless
+you explicitly change it through Pi's options.
+
+These options belong to the adapter process and are applied whenever it starts
+Pi, including automatic restoration and `session/load`. They are not saved in
+session records; restarting the adapter uses the current launch configuration.
+Session-specific system prompts continue to use `_meta.systemPrompt`.
+
+Adapter options go before the separator. For example,
+`pi-acp --terminal-login -- --skill /absolute/skills` opens interactive Pi with
+the same skill path. Unknown adapter options are rejected. Options that select
+Pi's mode, session, prompt, or one-shot output are reserved and rejected even
+after `--` (including `--mode`, `--session`, `--session-dir`, `--no-session`,
+`--resume`, `--continue`, `--system-prompt`, and `--append-system-prompt`).
+
 ### Client system prompts
 
 Clients can configure a session's system prompt through the ACP extension
