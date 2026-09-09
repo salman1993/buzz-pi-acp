@@ -42,25 +42,24 @@ test('client prompts survive A/B switching, explicit load, and adapter restart',
   const agent = createAgent()
   const initialized = await agent.initialize({ protocolVersion: 1, clientCapabilities: {} })
   assert.deepEqual(initialized.agentCapabilities?._meta, {
-    piAcp: { systemPrompt: { replace: true, append: true, persisted: true }, sessionTitle: true }
+    piAcp: { sessionTitle: true }
   })
-  await assert.rejects(agent.newSession({ cwd: root, mcpServers: [], _meta: { systemPrompt: null } }), { code: -32602 })
+  await assert.rejects(
+    agent.newSession({ cwd: root, mcpServers: [], systemPrompt: null } as Parameters<typeof agent.newSession>[0]),
+    { code: -32602 }
+  )
   assert.equal(calls.length, 0)
   const a = await agent.newSession({
     cwd: root,
     mcpServers: [],
-    _meta: { systemPrompt: 'prompt A', sessionTitle: 'A' }
-  })
-  await agent.newSession({ cwd: root, mcpServers: [], _meta: { systemPrompt: { append: 'prompt B' } } })
-  assert.equal(disposed, 1)
+    systemPrompt: 'prompt A',
+    _meta: { sessionTitle: 'A' }
+  } as Parameters<typeof agent.newSession>[0])
+  assert.equal(disposed, 0)
   await agent.setSessionMode({ sessionId: a.sessionId, modeId: 'medium' })
   assert.deepEqual(
     calls.map(call => call.systemPrompt),
-    [
-      { mode: 'replace', text: 'prompt A' },
-      { mode: 'append', text: 'prompt B' },
-      { mode: 'replace', text: 'prompt A' }
-    ]
+    [{ mode: 'replace', text: 'prompt A' }]
   )
   agent.dispose()
   const restarted = createAgent()

@@ -7,11 +7,9 @@ import { parseSystemPrompt } from '../../src/acp/system-prompt.js'
 import { SessionStore } from '../../src/acp/session-store.js'
 import { prepareSystemPrompt } from '../../src/pi-rpc/system-prompt.js'
 
-test('system prompt metadata preserves text and distinguishes replacement from append', () => {
+test('system prompt request accepts only a nonempty replacement string', () => {
   assert.equal(parseSystemPrompt(undefined), undefined)
   assert.deepEqual(parseSystemPrompt('  instructions\n'), { mode: 'replace', text: '  instructions\n' })
-  assert.deepEqual(parseSystemPrompt({ append: 'extra' }), { mode: 'append', text: 'extra' })
-  assert.deepEqual(parseSystemPrompt({ append: '' }), { mode: 'append', text: '' })
   for (const value of [
     null,
     '',
@@ -21,6 +19,8 @@ test('system prompt metadata preserves text and distinguishes replacement from a
     [],
     {},
     { append: null },
+    { append: '' },
+    { append: 'extra' },
     { append: 1 },
     { append: 'x', preset: 'claude_code' }
   ]) {

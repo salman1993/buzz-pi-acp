@@ -274,7 +274,7 @@ export class PiAcpAgent implements ACPAgent {
         supportsTerminalAuthMeta: (params as any)?.clientCapabilities?._meta?.['terminal-auth'] === true
       }),
       agentCapabilities: {
-        _meta: { piAcp: { systemPrompt: { replace: true, append: true, persisted: true }, sessionTitle: true } },
+        _meta: { piAcp: { sessionTitle: true } },
         loadSession: true,
         mcpCapabilities: { http: false, sse: false },
         promptCapabilities: {
@@ -293,7 +293,7 @@ export class PiAcpAgent implements ACPAgent {
   }
 
   async newSession(params: NewSessionRequest) {
-    const systemPrompt = parseSystemPrompt(params._meta?.systemPrompt)
+    const systemPrompt = parseSystemPrompt((params as NewSessionRequest & { systemPrompt?: unknown }).systemPrompt)
     const sessionTitle = sanitizeSessionTitle(params._meta?.sessionTitle)
     if (!isAbsolute(params.cwd)) {
       throw RequestError.invalidParams(`cwd must be an absolute path: ${params.cwd}`)
