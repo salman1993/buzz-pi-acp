@@ -82,9 +82,9 @@ function prepareSystemPrompt(prompt) {
   };
   try {
     const path = join(directory, "prompt.md");
-    writeFileSync(path, prompt, { encoding: "utf-8", mode: 384, flag: "wx" });
+    writeFileSync(path, prompt.text, { encoding: "utf-8", mode: 384, flag: "wx" });
     return {
-      args: ["--system-prompt", path],
+      args: [prompt.mode === "append" ? "--append-system-prompt" : "--system-prompt", path],
       dispose
     };
   } catch (error) {
@@ -391,6 +391,17 @@ function getPiAcpSessionMapPath() {
 }
 
 // src/acp/session-store.ts
+function normalizeSystemPrompt(value) {
+  if (typeof value === "string" && value.trim()) {
+    return { mode: "replace", text: value };
+  }
+  if (typeof value !== "object" || value === null) return void 0;
+  const prompt = value;
+  if ((prompt.mode === "append" || prompt.mode === "replace") && typeof prompt.text === "string" && prompt.text.trim()) {
+    return { mode: prompt.mode, text: prompt.text };
+  }
+  return void 0;
+}
 function ensureParentDir(path) {
   mkdirSync(dirname(path), { recursive: true });
 }
@@ -418,11 +429,14 @@ var SessionStore = class {
   }
   get(sessionId) {
     const db = loadFile(this.path);
-    return db.sessions[sessionId] ?? null;
+    const stored = db.sessions[sessionId];
+    if (!stored) return null;
+    const systemPrompt = normalizeSystemPrompt(stored.systemPrompt);
+    return { ...stored, systemPrompt };
   }
   upsert(entry) {
     const db = loadFile(this.path);
-    const systemPrompt = entry.systemPrompt ?? db.sessions[entry.sessionId]?.systemPrompt;
+    const systemPrompt = entry.systemPrompt ?? normalizeSystemPrompt(db.sessions[entry.sessionId]?.systemPrompt);
     const sessionTitle = entry.sessionTitle ?? db.sessions[entry.sessionId]?.sessionTitle;
     db.sessions[entry.sessionId] = {
       sessionId: entry.sessionId,
@@ -1423,12 +1437,26 @@ function toToolKind(toolName) {
 
 // src/acp/system-prompt.ts
 import { RequestError as RequestError3 } from "@agentclientprotocol/sdk";
+function isNonemptyString(value) {
+  return typeof value === "string" && value.trim().length > 0;
+}
 function parseSystemPrompt(value) {
   if (value === void 0) return void 0;
-  if (typeof value === "string" && value.trim().length > 0) {
-    return value;
+  if (isNonemptyString(value)) {
+    return { mode: "replace", text: value };
   }
-  throw RequestError3.invalidParams("_meta.systemPrompt must be a nonempty string");
+  if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+    const entries = Object.entries(value);
+    if (entries.length === 1) {
+      const [mode, text] = entries[0];
+      if ((mode === "append" || mode === "replace") && isNonemptyString(text)) {
+        return { mode, text };
+      }
+    }
+  }
+  throw RequestError3.invalidParams(
+    "_meta.systemPrompt must be a nonempty string or an object containing exactly one nonempty append or replace string"
+  );
 }
 
 // src/acp/session-title.ts

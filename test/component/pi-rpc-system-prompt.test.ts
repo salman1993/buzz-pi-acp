@@ -32,11 +32,15 @@ readline.createInterface({ input: process.stdin }).on('line', line => {
       { mode: 0o700 }
     )
     const text = '/etc/hosts\nLiteral $HOME and "quotes"'
-    const proc = await PiRpcProcess.spawn({ cwd: root, piCommand: executable, systemPrompt: text })
+    const proc = await PiRpcProcess.spawn({
+      cwd: root,
+      piCommand: executable,
+      systemPrompt: { mode: 'append', text }
+    })
     const args = JSON.parse(readFileSync(join(root, 'args.json'), 'utf-8')) as string[]
     const path = args.at(-1)!
     try {
-      assert.equal(args.at(-2), '--system-prompt')
+      assert.equal(args.at(-2), '--append-system-prompt')
       assert.equal(readFileSync(path, 'utf-8'), text)
       assert.ok(!args.includes(text))
     } finally {
@@ -50,7 +54,7 @@ readline.createInterface({ input: process.stdin }).on('line', line => {
       PiRpcProcess.spawn({
         cwd: root,
         piCommand: join(root, 'missing-executable'),
-        systemPrompt: 'instructions'
+        systemPrompt: { mode: 'replace', text: 'instructions' }
       }),
       { name: 'PiRpcSpawnError', code: 'ENOENT' }
     )
@@ -102,7 +106,7 @@ test(
       cwd: root,
       piCommand: executable,
       sessionPath,
-      systemPrompt: marker
+      systemPrompt: { mode: 'replace', text: marker }
     })
     try {
       const output = join(root, 'replace.html')

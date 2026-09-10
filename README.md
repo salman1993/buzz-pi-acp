@@ -29,13 +29,18 @@ Run the same install command again to update the adapter.
 
 ### Client system prompts
 
-Buzz can replace Pi's system prompt through the provisional `session/new.params._meta.systemPrompt` field:
+Buzz can replace or extend Pi's system prompt through the provisional `session/new.params._meta.systemPrompt` field:
 
 ```json
-{ "_meta": { "systemPrompt": "Follow this agent's instructions." } }
+// append
+{ "_meta": { "systemPrompt": { "append": "Append this to the agent's instructions." } } }
+
+// replace
+{ "_meta": { "systemPrompt": "Replace this agent's instructions." } }
+{ "_meta": { "systemPrompt": { "replace": "Replace this agent's instructions." } } }
 ```
 
-The value must be a nonempty string. It is not advertised during capability negotiation. The adapter preserves the prompt when Buzz reloads or restores the session.
+Each prompt must be a nonempty string. A bare string is shorthand for `replace`. It is not advertised during capability negotiation. The adapter preserves both the prompt and its append/replace behavior when Buzz reloads or restores the session.
 
 ### Session titles
 
