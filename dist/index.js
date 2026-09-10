@@ -82,9 +82,9 @@ function prepareSystemPrompt(prompt) {
   };
   try {
     const path = join(directory, "prompt.md");
-    writeFileSync(path, prompt.text, { encoding: "utf-8", mode: 384, flag: "wx" });
+    writeFileSync(path, prompt, { encoding: "utf-8", mode: 384, flag: "wx" });
     return {
-      args: [prompt.mode === "replace" ? "--system-prompt" : "--append-system-prompt", path],
+      args: ["--system-prompt", path],
       dispose
     };
   } catch (error) {
@@ -1426,14 +1426,9 @@ import { RequestError as RequestError3 } from "@agentclientprotocol/sdk";
 function parseSystemPrompt(value) {
   if (value === void 0) return void 0;
   if (typeof value === "string" && value.trim().length > 0) {
-    return { mode: "replace", text: value };
+    return value;
   }
-  if (typeof value === "object" && value !== null && !Array.isArray(value) && "append" in value && typeof value.append === "string" && Object.keys(value).length === 1) {
-    return { mode: "append", text: value.append };
-  }
-  throw RequestError3.invalidParams(
-    "_meta.systemPrompt must be a nonempty string or an object containing only append: string"
-  );
+  throw RequestError3.invalidParams("_meta.systemPrompt must be a nonempty string");
 }
 
 // src/acp/session-title.ts
@@ -2022,7 +2017,6 @@ var PiAcpAgent = class {
         supportsTerminalAuthMeta: params?.clientCapabilities?._meta?.["terminal-auth"] === true
       }),
       agentCapabilities: {
-        _meta: { piAcp: { systemPrompt: { replace: true, append: true, persisted: true }, sessionTitle: true } },
         loadSession: true,
         mcpCapabilities: { http: false, sse: false },
         promptCapabilities: {

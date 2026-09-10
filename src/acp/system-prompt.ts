@@ -5,5 +5,5 @@ export function parseSystemPrompt(value: unknown): string | undefined {
   if (typeof value === 'string' && value.trim().length > 0) {
     return value
   }
-  throw RequestError.invalidParams('systemPrompt must be a nonempty string')
+  throw RequestError.invalidParams('_meta.systemPrompt must be a nonempty string')
 }

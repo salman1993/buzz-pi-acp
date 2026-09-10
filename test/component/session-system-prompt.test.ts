@@ -43,15 +43,16 @@ test('client prompts survive A/B switching, explicit load, and adapter restart',
   const initialized = await agent.initialize({ protocolVersion: 1, clientCapabilities: {} })
   assert.equal(initialized.agentCapabilities?._meta, undefined)
   await assert.rejects(
-    agent.newSession({ cwd: root, mcpServers: [], systemPrompt: null } as Parameters<typeof agent.newSession>[0]),
+    agent.newSession({ cwd: root, mcpServers: [], _meta: { systemPrompt: null } } as Parameters<
+      typeof agent.newSession
+    >[0]),
     { code: -32602 }
   )
   assert.equal(calls.length, 0)
   const a = await agent.newSession({
     cwd: root,
     mcpServers: [],
-    systemPrompt: 'prompt A',
-    _meta: { sessionTitle: 'A' }
+    _meta: { systemPrompt: 'prompt A', sessionTitle: 'A' }
   } as Parameters<typeof agent.newSession>[0])
   assert.equal(disposed, 0)
   await agent.setSessionMode({ sessionId: a.sessionId, modeId: 'medium' })
