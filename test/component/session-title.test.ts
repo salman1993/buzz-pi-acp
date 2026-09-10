@@ -55,8 +55,8 @@ test('new session titles are applied, announced, restored before flush, and do n
   const a = await agent.newSession({
     cwd: root,
     mcpServers: [],
-    systemPrompt: 'instructions',
     _meta: {
+      systemPrompt: 'instructions',
       sessionTitle: ' Fix\nthe  login bug '
     }
   } as Parameters<typeof agent.newSession>[0])

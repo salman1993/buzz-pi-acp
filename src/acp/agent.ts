@@ -292,7 +292,7 @@ export class PiAcpAgent implements ACPAgent {
   }
 
   async newSession(params: NewSessionRequest) {
-    const systemPrompt = parseSystemPrompt((params as NewSessionRequest & { systemPrompt?: unknown }).systemPrompt)
+    const systemPrompt = parseSystemPrompt(params._meta?.systemPrompt)
     const sessionTitle = sanitizeSessionTitle(params._meta?.sessionTitle)
     if (!isAbsolute(params.cwd)) {
       throw RequestError.invalidParams(`cwd must be an absolute path: ${params.cwd}`)

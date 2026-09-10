@@ -29,13 +29,23 @@ Run the same install command again to update the adapter.
 
 ### Client system prompts
 
-Buzz can replace Pi's system prompt through the provisional `session/new.params.systemPrompt` field:
+Buzz can replace Pi's system prompt through the provisional `session/new.params._meta.systemPrompt` field:
 
 ```json
-{ "systemPrompt": "Follow this agent's instructions." }
+{ "_meta": { "systemPrompt": "Follow this agent's instructions." } }
 ```
 
 The value must be a nonempty string. It is not advertised during capability negotiation. The adapter preserves the prompt when Buzz reloads or restores the session.
+
+### Session titles
+
+Buzz can name a session through the provisional `session/new.params._meta.sessionTitle` field:
+
+```json
+{ "_meta": { "sessionTitle": "Fix the login bug" } }
+```
+
+The value is trimmed, collapsed to single spaces, and truncated to 256 characters. Blank or non-string values are ignored. The adapter forwards the title to Pi as the session name and preserves it across reloads.
 
 ### Forwarding Pi launch options
 
