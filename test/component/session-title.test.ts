@@ -21,7 +21,7 @@ test('session titles follow the whitespace and 256-character contract', () => {
 
 test('new session titles are applied, announced, restored before flush, and do not override persisted names', async t => {
   const root = mkdtempSync(join(tmpdir(), 'pi-acp-title-test-'))
-  const store = new SessionStore(join(root, 'map.json'))
+  const store = new SessionStore(join(root, 'sessions'))
   const conn = new FakeAgentSideConnection()
   const agent = new PiAcpAgent(asAgentConn(conn))
   const internals = agent as unknown as { store: SessionStore; sessions: SessionManager }

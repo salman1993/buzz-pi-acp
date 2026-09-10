@@ -25,7 +25,6 @@ test('PiAcpAgent: newSession returns AUTH_REQUIRED when pi reports an auth error
   const conn = new FakeAgentSideConnection()
   const root = mkdtempSync(join(tmpdir(), 'pi-acp-runtime-auth-'))
   const sessionFile = join(root, 'sessions', 'failed.jsonl')
-  const sessionMapPath = join(root, 'session-map.json')
 
   mkdirSync(join(root, 'sessions'), { recursive: true })
   writeFileSync(
@@ -54,7 +53,7 @@ test('PiAcpAgent: newSession returns AUTH_REQUIRED when pi reports an auth error
   }
 
   const sessions = new FakeSessions(session)
-  const store = new SessionStore(sessionMapPath)
+  const store = new SessionStore(join(root, 'session-metadata'))
   store.upsert({ sessionId: 's-auth', cwd: process.cwd(), sessionFile })
   const agent = new PiAcpAgent(asAgentConn(conn), {} as any)
   ;(agent as any).sessions = sessions as any

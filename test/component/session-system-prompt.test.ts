@@ -12,7 +12,7 @@ import { asAgentConn, FakeAgentSideConnection, FakePiRpcProcess } from '../helpe
 test('client prompts preserve their mode through explicit load and adapter restart', async t => {
   const root = mkdtempSync(join(tmpdir(), 'pi-acp-session-prompt-'))
   t.after(() => rmSync(root, { recursive: true, force: true }))
-  const path = join(root, 'map.json')
+  const sessionsDir = join(root, 'sessions')
   const calls: Parameters<typeof PiRpcProcess.spawn>[0][] = []
   let counter = 0
   let disposed = 0
@@ -34,8 +34,8 @@ test('client prompts preserve their mode through explicit load and adapter resta
   function createAgent() {
     const agent = new PiAcpAgent(asAgentConn(new FakeAgentSideConnection()), { piArgs: ['--skill', '/launch skills'] })
     const internals = agent as unknown as { store: SessionStore; sessions: SessionManager }
-    internals.store = new SessionStore(path)
-    ;(internals.sessions as unknown as { store: SessionStore }).store = new SessionStore(path)
+    internals.store = new SessionStore(sessionsDir)
+    ;(internals.sessions as unknown as { store: SessionStore }).store = new SessionStore(sessionsDir)
     t.after(() => agent.dispose())
     return agent
   }
@@ -66,8 +66,8 @@ test('client prompts preserve their mode through explicit load and adapter resta
   await restarted.loadSession({ cwd: root, sessionId: a.sessionId, mcpServers: [] })
   assert.deepEqual(calls.at(-1)?.systemPrompt, { mode: 'append', text: 'prompt A' })
   assert.ok(calls.every(call => JSON.stringify(call.piArgs) === JSON.stringify(['--skill', '/launch skills'])))
-  assert.deepEqual(new SessionStore(path).get('a')?.systemPrompt, { mode: 'append', text: 'prompt A' })
+  assert.deepEqual(new SessionStore(sessionsDir).get('a')?.systemPrompt, { mode: 'append', text: 'prompt A' })
   await restarted.deleteSession({ sessionId: a.sessionId })
-  assert.equal(new SessionStore(path).get('a'), null)
+  assert.equal(new SessionStore(sessionsDir).get('a'), null)
   await new Promise(resolve => setTimeout(resolve, 10))
 })

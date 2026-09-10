@@ -52,6 +52,10 @@ Buzz can name a session through the provisional `session/new.params._meta.sessio
 
 The value is trimmed, collapsed to single spaces, and truncated to 256 characters. Blank or non-string values are ignored. The adapter forwards the title to Pi as the session name and preserves it across reloads.
 
+### Concurrent session metadata
+
+Unlike upstream pi-acp, this fork stores restore metadata in one atomic file per session under `~/.pi/buzz-pi-acp/sessions/`. Separate Buzz workers therefore cannot overwrite unrelated session prompts or titles.
+
 ### Forwarding Pi launch options
 
 Arguments after `--` are passed to every Pi process. For example:

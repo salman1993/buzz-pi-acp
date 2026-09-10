@@ -7,9 +7,9 @@ import { join } from 'node:path'
  * We intentionally keep this separate from pi's own ~/.pi/agent/* directory.
  */
 export function getPiAcpDir(): string {
-  return join(homedir(), '.pi', 'pi-acp')
+  return join(homedir(), '.pi', 'buzz-pi-acp')
 }
 
-export function getPiAcpSessionMapPath(): string {
-  return join(getPiAcpDir(), 'session-map.json')
+export function getPiAcpSessionsDir(): string {
+  return join(getPiAcpDir(), 'sessions')
 }
