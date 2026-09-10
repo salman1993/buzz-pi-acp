@@ -10,7 +10,6 @@ import {
   type ListSessionsResponse,
   type LoadSessionRequest,
   type LoadSessionResponse,
-  type NewSessionRequest,
   type PromptRequest,
   type PromptResponse,
   type SessionConfigOption,
@@ -27,6 +26,7 @@ import { getAuthMethods } from './auth.js'
 import { SessionManager, type PiAcpSession } from './session.js'
 import { SessionStore, type StoredSession } from './session-store.js'
 import { parseSystemPrompt } from './system-prompt.js'
+import { systemPromptFromNewSessionRequest, type PiNewSessionRequest } from './new-session-request.js'
 import { sanitizeSessionTitle } from './session-title.js'
 import { PiRpcProcess } from '../pi-rpc/process.js'
 import { listPiSessions, findPiSession } from './pi-sessions.js'
@@ -291,8 +291,8 @@ export class PiAcpAgent implements ACPAgent {
     }
   }
 
-  async newSession(params: NewSessionRequest) {
-    const systemPrompt = parseSystemPrompt((params as NewSessionRequest & { systemPrompt?: unknown }).systemPrompt)
+  async newSession(params: PiNewSessionRequest) {
+    const systemPrompt = parseSystemPrompt(systemPromptFromNewSessionRequest(params))
     const sessionTitle = sanitizeSessionTitle(params._meta?.sessionTitle)
     if (!isAbsolute(params.cwd)) {
       throw RequestError.invalidParams(`cwd must be an absolute path: ${params.cwd}`)

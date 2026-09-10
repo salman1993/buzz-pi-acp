@@ -82,9 +82,9 @@ function prepareSystemPrompt(prompt) {
   };
   try {
     const path = join(directory, "prompt.md");
-    writeFileSync(path, prompt.text, { encoding: "utf-8", mode: 384, flag: "wx" });
+    writeFileSync(path, prompt, { encoding: "utf-8", mode: 384, flag: "wx" });
     return {
-      args: [prompt.mode === "replace" ? "--system-prompt" : "--append-system-prompt", path],
+      args: ["--system-prompt", path],
       dispose
     };
   } catch (error) {
@@ -1426,14 +1426,55 @@ import { RequestError as RequestError3 } from "@agentclientprotocol/sdk";
 function parseSystemPrompt(value) {
   if (value === void 0) return void 0;
   if (typeof value === "string" && value.trim().length > 0) {
-    return { mode: "replace", text: value };
+    return value;
   }
-  if (typeof value === "object" && value !== null && !Array.isArray(value) && "append" in value && typeof value.append === "string" && Object.keys(value).length === 1) {
-    return { mode: "append", text: value.append };
-  }
-  throw RequestError3.invalidParams(
-    "_meta.systemPrompt must be a nonempty string or an object containing only append: string"
+  throw RequestError3.invalidParams("systemPrompt must be a nonempty string");
+}
+
+// src/acp/new-session-request.ts
+var TRANSPORT_SYSTEM_PROMPT_KEY = "piAcp.transportSystemPrompt";
+var transportedSystemPrompts = /* @__PURE__ */ new WeakMap();
+function isRecord(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function hasOwn(value, key) {
+  return Object.prototype.hasOwnProperty.call(value, key);
+}
+function preserveNewSessionSystemPrompt(stream2) {
+  const readable = stream2.readable.pipeThrough(
+    new TransformStream({
+      transform(message, controller) {
+        if (!("method" in message) || message.method !== "session/new" || !isRecord(message.params) || !hasOwn(message.params, "systemPrompt")) {
+          controller.enqueue(message);
+          return;
+        }
+        const meta = message.params._meta;
+        if (meta !== void 0 && meta !== null && !isRecord(meta)) {
+          controller.enqueue(message);
+          return;
+        }
+        const token = {};
+        transportedSystemPrompts.set(token, message.params.systemPrompt);
+        controller.enqueue({
+          ...message,
+          params: {
+            ...message.params,
+            _meta: {
+              ...meta ?? {},
+              [TRANSPORT_SYSTEM_PROMPT_KEY]: token
+            }
+          }
+        });
+      }
+    })
   );
+  return { readable, writable: stream2.writable };
+}
+function systemPromptFromNewSessionRequest(params) {
+  if (hasOwn(params, "systemPrompt")) return params.systemPrompt;
+  if (!isRecord(params._meta)) return void 0;
+  const token = params._meta[TRANSPORT_SYSTEM_PROMPT_KEY];
+  return isRecord(token) ? transportedSystemPrompts.get(token) : void 0;
 }
 
 // src/acp/session-title.ts
@@ -2022,7 +2063,6 @@ var PiAcpAgent = class {
         supportsTerminalAuthMeta: params?.clientCapabilities?._meta?.["terminal-auth"] === true
       }),
       agentCapabilities: {
-        _meta: { piAcp: { systemPrompt: { replace: true, append: true, persisted: true }, sessionTitle: true } },
         loadSession: true,
         mcpCapabilities: { http: false, sse: false },
         promptCapabilities: {
@@ -2040,7 +2080,7 @@ var PiAcpAgent = class {
     };
   }
   async newSession(params) {
-    const systemPrompt = parseSystemPrompt(params._meta?.systemPrompt);
+    const systemPrompt = parseSystemPrompt(systemPromptFromNewSessionRequest(params));
     const sessionTitle = sanitizeSessionTitle(params._meta?.sessionTitle);
     if (!isAbsolute3(params.cwd)) {
       throw RequestError4.invalidParams(`cwd must be an absolute path: ${params.cwd}`);
@@ -3177,7 +3217,7 @@ var output = new ReadableStream({
     process.stdin.on("error", (err) => controller.error(err));
   }
 });
-var stream = ndJsonStream(input, output);
+var stream = preserveNewSessionSystemPrompt(ndJsonStream(input, output));
 var agent = new AgentSideConnection((conn) => new PiAcpAgent(conn, { piArgs: launchArgs.piArgs }), stream);
 function shutdown() {
   try {

@@ -1,5 +1,6 @@
 import { AgentSideConnection, ndJsonStream } from '@agentclientprotocol/sdk'
 import { PiAcpAgent } from './acp/agent.js'
+import { preserveNewSessionSystemPrompt } from './acp/new-session-request.js'
 import { getPiCommand, shouldUseShellForPiCommand } from './pi-rpc/command.js'
 import { parseLaunchArgs, type LaunchArgs } from './launch-args.js'
 
@@ -56,7 +57,7 @@ const output = new ReadableStream<Uint8Array>({
   }
 })
 
-const stream = ndJsonStream(input, output)
+const stream = preserveNewSessionSystemPrompt(ndJsonStream(input, output))
 
 const agent = new AgentSideConnection(conn => new PiAcpAgent(conn, { piArgs: launchArgs.piArgs }), stream)
 
