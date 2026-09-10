@@ -377,8 +377,9 @@ function maybeAuthRequiredError(err) {
 }
 
 // src/acp/session-store.ts
-import { chmodSync, mkdirSync, readFileSync, writeFileSync as writeFileSync2 } from "fs";
-import { dirname } from "path";
+import { chmodSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync as writeFileSync2 } from "fs";
+import { createHash, randomUUID } from "crypto";
+import { dirname, join as join3 } from "path";
 
 // src/acp/paths.ts
 import { homedir } from "os";
@@ -386,8 +387,8 @@ import { join as join2 } from "path";
 function getPiAcpDir() {
   return join2(homedir(), ".pi", "pi-acp");
 }
-function getPiAcpSessionMapPath() {
-  return join2(getPiAcpDir(), "session-map.json");
+function getPiAcpSessionsDir() {
+  return join2(getPiAcpDir(), "sessions");
 }
 
 // src/acp/session-store.ts
@@ -405,40 +406,71 @@ function normalizeSystemPrompt(value) {
 function ensureParentDir(path) {
   mkdirSync(dirname(path), { recursive: true });
 }
-function loadFile(path) {
+function saveFileAtomically(path, data) {
+  ensureParentDir(path);
+  const temporaryPath = `${path}.${process.pid}.${randomUUID()}.tmp`;
   try {
-    const raw = readFileSync(path, "utf-8");
-    const parsed = JSON.parse(raw);
-    if (parsed?.version !== 1 || typeof parsed.sessions !== "object" || !parsed.sessions) {
-      return { version: 1, sessions: {} };
+    writeFileSync2(temporaryPath, JSON.stringify(data, null, 2) + "\n", {
+      encoding: "utf-8",
+      mode: 384,
+      flag: "wx"
+    });
+    renameSync(temporaryPath, path);
+    chmodSync(path, 384);
+  } finally {
+    try {
+      unlinkSync(temporaryPath);
+    } catch {
     }
-    return parsed;
-  } catch {
-    return { version: 1, sessions: {} };
   }
 }
-function saveFile(path, data) {
-  ensureParentDir(path);
-  writeFileSync2(path, JSON.stringify(data, null, 2) + "\n", { encoding: "utf-8", mode: 384 });
-  chmodSync(path, 384);
+function normalizeStoredSession(value, sessionId) {
+  if (typeof value !== "object" || value === null) return null;
+  const stored = value;
+  if (stored.sessionId !== sessionId || typeof stored.cwd !== "string" || typeof stored.sessionFile !== "string" || typeof stored.updatedAt !== "string") {
+    return null;
+  }
+  const systemPrompt = normalizeSystemPrompt(stored.systemPrompt);
+  const sessionTitle = typeof stored.sessionTitle === "string" && stored.sessionTitle ? stored.sessionTitle : void 0;
+  return {
+    sessionId,
+    cwd: stored.cwd,
+    sessionFile: stored.sessionFile,
+    updatedAt: stored.updatedAt,
+    ...systemPrompt ? { systemPrompt } : {},
+    ...sessionTitle ? { sessionTitle } : {}
+  };
+}
+function loadMetadataFile(path, sessionId) {
+  try {
+    const parsed = JSON.parse(readFileSync(path, "utf-8"));
+    if (typeof parsed !== "object" || parsed === null || parsed.version !== 1) {
+      return null;
+    }
+    return normalizeStoredSession(parsed.session, sessionId);
+  } catch {
+    return null;
+  }
+}
+function metadataFilename(sessionId) {
+  return `${createHash("sha256").update(sessionId).digest("hex")}.json`;
 }
 var SessionStore = class {
-  path;
-  constructor(path = getPiAcpSessionMapPath()) {
-    this.path = path;
+  sessionsDir;
+  constructor(sessionsDir = getPiAcpSessionsDir()) {
+    this.sessionsDir = sessionsDir;
+  }
+  metadataPath(sessionId) {
+    return join3(this.sessionsDir, metadataFilename(sessionId));
   }
   get(sessionId) {
-    const db = loadFile(this.path);
-    const stored = db.sessions[sessionId];
-    if (!stored) return null;
-    const systemPrompt = normalizeSystemPrompt(stored.systemPrompt);
-    return { ...stored, systemPrompt };
+    return loadMetadataFile(this.metadataPath(sessionId), sessionId);
   }
   upsert(entry) {
-    const db = loadFile(this.path);
-    const systemPrompt = entry.systemPrompt ?? normalizeSystemPrompt(db.sessions[entry.sessionId]?.systemPrompt);
-    const sessionTitle = entry.sessionTitle ?? db.sessions[entry.sessionId]?.sessionTitle;
-    db.sessions[entry.sessionId] = {
+    const existing = this.get(entry.sessionId);
+    const systemPrompt = entry.systemPrompt ?? existing?.systemPrompt;
+    const sessionTitle = entry.sessionTitle ?? existing?.sessionTitle;
+    const session = {
       sessionId: entry.sessionId,
       cwd: entry.cwd,
       sessionFile: entry.sessionFile,
@@ -446,20 +478,21 @@ var SessionStore = class {
       ...sessionTitle ? { sessionTitle } : {},
       updatedAt: (/* @__PURE__ */ new Date()).toISOString()
     };
-    saveFile(this.path, db);
+    saveFileAtomically(this.metadataPath(entry.sessionId), { version: 1, session });
   }
   delete(sessionId) {
-    const db = loadFile(this.path);
-    if (!db.sessions[sessionId]) return;
-    delete db.sessions[sessionId];
-    saveFile(this.path, db);
+    try {
+      unlinkSync(this.metadataPath(sessionId));
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+    }
   }
 };
 
 // src/acp/slash-commands.ts
 import { existsSync, readdirSync, readFileSync as readFileSync2 } from "fs";
 import { homedir as homedir2 } from "os";
-import { join as join3, resolve } from "path";
+import { join as join4, resolve } from "path";
 function parseFrontmatter(content) {
   const frontmatter = {};
   if (!content.startsWith("---")) return { frontmatter, content };
@@ -479,7 +512,7 @@ function loadCommandsFromDir(dir, source, subdir = "") {
   try {
     const entries = readdirSync(dir, { withFileTypes: true });
     for (const entry of entries) {
-      const fullPath = join3(dir, entry.name);
+      const fullPath = join4(dir, entry.name);
       if (entry.isDirectory()) {
         const newSubdir = subdir ? `${subdir}:${entry.name}` : entry.name;
         commands.push(...loadCommandsFromDir(fullPath, source, newSubdir));
@@ -515,7 +548,7 @@ function loadCommandsFromDir(dir, source, subdir = "") {
 }
 function loadSlashCommands(cwd) {
   const commands = [];
-  const userDir = join3(homedir2(), ".pi", "agent", "prompts");
+  const userDir = join4(homedir2(), ".pi", "agent", "prompts");
   const projectDir = resolve(cwd, ".pi", "prompts");
   commands.push(...loadCommandsFromDir(userDir, "user"));
   commands.push(...loadCommandsFromDir(projectDir, "project"));
@@ -1470,14 +1503,14 @@ function sanitizeSessionTitle(value) {
 // src/acp/pi-sessions.ts
 import { readdirSync as readdirSync2, readFileSync as readFileSync4, statSync, openSync, readSync, closeSync, existsSync as existsSync2 } from "fs";
 import { homedir as homedir3 } from "os";
-import { join as join4, resolve as resolve2, isAbsolute as isAbsolute2 } from "path";
+import { join as join5, resolve as resolve2, isAbsolute as isAbsolute2 } from "path";
 var DEFAULT_TAIL_BYTES = 256 * 1024;
 var DEFAULT_HEAD_BYTES = 64 * 1024;
 function getPiAgentDir() {
-  return process.env.PI_CODING_AGENT_DIR ? resolve2(process.env.PI_CODING_AGENT_DIR) : join4(homedir3(), ".pi", "agent");
+  return process.env.PI_CODING_AGENT_DIR ? resolve2(process.env.PI_CODING_AGENT_DIR) : join5(homedir3(), ".pi", "agent");
 }
 function readSessionDirFromSettings(agentDir) {
-  const settingsPath = join4(agentDir, "settings.json");
+  const settingsPath = join5(agentDir, "settings.json");
   try {
     if (!existsSync2(settingsPath)) return null;
     const raw = readFileSync4(settingsPath, "utf8");
@@ -1492,7 +1525,7 @@ function readSessionDirFromSettings(agentDir) {
 }
 function getPiSessionsDir() {
   const agentDir = getPiAgentDir();
-  return readSessionDirFromSettings(agentDir) ?? join4(agentDir, "sessions");
+  return readSessionDirFromSettings(agentDir) ?? join5(agentDir, "sessions");
 }
 function walkJsonlFiles(dir, out) {
   let entries;
@@ -1503,7 +1536,7 @@ function walkJsonlFiles(dir, out) {
   }
   for (const e of entries) {
     const name = typeof e.name === "string" ? e.name : String(e.name);
-    const p = join4(dir, name);
+    const p = join5(dir, name);
     if (e.isDirectory()) walkJsonlFiles(p, out);
     else if (e.isFile() && name.endsWith(".jsonl")) out.push(p);
   }
@@ -1787,7 +1820,7 @@ ${r.text}`;
 // src/acp/pi-settings.ts
 import { existsSync as existsSync3, readFileSync as readFileSync5 } from "fs";
 import { homedir as homedir4 } from "os";
-import { join as join5, resolve as resolve3 } from "path";
+import { join as join6, resolve as resolve3 } from "path";
 function isObject(x) {
   return Boolean(x) && typeof x === "object" && !Array.isArray(x);
 }
@@ -1811,14 +1844,14 @@ function readJsonFile(path) {
   }
 }
 function getMergedSettings(cwd) {
-  const globalSettingsPath = join5(getAgentDir(), "settings.json");
+  const globalSettingsPath = join6(getAgentDir(), "settings.json");
   const projectSettingsPath = resolve3(cwd, ".pi", "settings.json");
   const global = readJsonFile(globalSettingsPath);
   const project = readJsonFile(projectSettingsPath);
   return deepMerge(global, project);
 }
 function getAgentDir() {
-  return process.env.PI_CODING_AGENT_DIR ? resolve3(process.env.PI_CODING_AGENT_DIR) : join5(homedir4(), ".pi", "agent");
+  return process.env.PI_CODING_AGENT_DIR ? resolve3(process.env.PI_CODING_AGENT_DIR) : join6(homedir4(), ".pi", "agent");
 }
 function getEnableSkillCommands(cwd) {
   const merged = getMergedSettings(cwd);
@@ -1869,8 +1902,8 @@ function toAvailableCommandsFromPiGetCommands(data, opts) {
 
 // src/acp/agent.ts
 import { isAbsolute as isAbsolute3 } from "path";
-import { existsSync as existsSync4, readFileSync as readFileSync6, realpathSync, readdirSync as readdirSync3, statSync as statSync2, unlinkSync } from "fs";
-import { join as join6, dirname as dirname2, basename } from "path";
+import { existsSync as existsSync4, readFileSync as readFileSync6, realpathSync, readdirSync as readdirSync3, statSync as statSync2, unlinkSync as unlinkSync2 } from "fs";
+import { join as join7, dirname as dirname2, basename } from "path";
 import { spawnSync } from "child_process";
 import { fileURLToPath } from "url";
 var MODEL_CONFIG_ID = "model";
@@ -1947,7 +1980,7 @@ var PiAcpAgent = class {
     const sessionFile = typeof state?.sessionFile === "string" && state.sessionFile.trim() ? state.sessionFile : this.store.get(sessionId)?.sessionFile;
     if (typeof sessionFile === "string" && sessionFile.trim()) {
       try {
-        if (existsSync4(sessionFile)) unlinkSync(sessionFile);
+        if (existsSync4(sessionFile)) unlinkSync2(sessionFile);
       } catch {
       }
     }
@@ -2387,7 +2420,7 @@ ${JSON.stringify(stats, null, 2)}`;
             if (piPath) {
               const resolved = realpathSync(piPath);
               const pkgRoot = dirname2(dirname2(resolved));
-              const p = join6(pkgRoot, "CHANGELOG.md");
+              const p = join7(pkgRoot, "CHANGELOG.md");
               if (existsSync4(p)) return p;
             }
           } catch {
@@ -2396,7 +2429,7 @@ ${JSON.stringify(stats, null, 2)}`;
             const npmRoot = spawnSync("npm", ["root", "-g"], { encoding: "utf-8" });
             const root = String(npmRoot.stdout ?? "").trim();
             if (root) {
-              const p = join6(root, "@earendil-works", "pi-coding-agent", "CHANGELOG.md");
+              const p = join7(root, "@earendil-works", "pi-coding-agent", "CHANGELOG.md");
               if (existsSync4(p)) return p;
             }
           } catch {
@@ -2484,7 +2517,7 @@ ${JSON.stringify(stats, null, 2)}`;
           return { stopReason: "end_turn" };
         }
         const safeSessionId = session.sessionId.replace(/[^a-zA-Z0-9_-]/g, "_");
-        const outputPath = join6(session.cwd, `pi-session-${safeSessionId}.html`);
+        const outputPath = join7(session.cwd, `pi-session-${safeSessionId}.html`);
         let resultPath = "";
         try {
           const result2 = await session.proc.exportHtml(outputPath);
@@ -2749,7 +2782,7 @@ ${JSON.stringify(stats, null, 2)}`;
     const sessionFile = stored?.sessionFile ?? piSession?.sessionFile;
     if (sessionFile) {
       try {
-        if (existsSync4(sessionFile)) unlinkSync(sessionFile);
+        if (existsSync4(sessionFile)) unlinkSync2(sessionFile);
       } catch {
       }
     }
@@ -3005,14 +3038,14 @@ function buildStartupInfo(opts) {
     md.push("");
   };
   const contextItems = [];
-  const contextPath = join6(opts.cwd, "AGENTS.md");
+  const contextPath = join7(opts.cwd, "AGENTS.md");
   if (existsSync4(contextPath)) contextItems.push(contextPath);
   addSection("Context", contextItems);
   const skillsItems = [];
   const pushSkillFromRoot = (root) => {
     try {
       for (const e of readdirSync3(root)) {
-        const p = join6(root, e);
+        const p = join7(root, e);
         try {
           const st = statSync2(p);
           if (st.isFile() && e.toLowerCase().endsWith(".md")) {
@@ -3032,7 +3065,7 @@ function buildStartupInfo(opts) {
         }
         for (const name of entries) {
           if (name === "node_modules" || name === ".git") continue;
-          const p = join6(dir, name);
+          const p = join7(dir, name);
           let st;
           try {
             st = statSync2(p);
@@ -3049,15 +3082,15 @@ function buildStartupInfo(opts) {
     } catch {
     }
   };
-  const globalSkillsDir = join6(getAgentDir(), "skills");
+  const globalSkillsDir = join7(getAgentDir(), "skills");
   pushSkillFromRoot(globalSkillsDir);
-  const legacyAgentsSkillsDir = join6(process.env.HOME ?? "", ".agents", "skills");
+  const legacyAgentsSkillsDir = join7(process.env.HOME ?? "", ".agents", "skills");
   pushSkillFromRoot(legacyAgentsSkillsDir);
-  const projectSkillsDir = join6(opts.cwd, ".pi", "skills");
+  const projectSkillsDir = join7(opts.cwd, ".pi", "skills");
   pushSkillFromRoot(projectSkillsDir);
   addSection("Skills", skillsItems);
   const promptsItems = [];
-  const promptsDir = join6(process.env.HOME ?? "", ".pi", "agent", "prompts");
+  const promptsDir = join7(process.env.HOME ?? "", ".pi", "agent", "prompts");
   try {
     const prompts = readdirSync3(promptsDir).filter((f) => f.endsWith(".md"));
     for (const f of prompts) promptsItems.push(`/${basename(f, ".md")}`);
@@ -3065,13 +3098,13 @@ function buildStartupInfo(opts) {
   }
   addSection("Prompts", promptsItems);
   const extItems = [];
-  const extDir = join6(process.env.HOME ?? "", ".pi", "agent", "extensions");
+  const extDir = join7(process.env.HOME ?? "", ".pi", "agent", "extensions");
   try {
     const exts = readdirSync3(extDir).filter((f) => f.endsWith(".ts") || f.endsWith(".js"));
-    for (const f of exts) extItems.push(join6(extDir, f));
+    for (const f of exts) extItems.push(join7(extDir, f));
   } catch {
   }
-  const settingsPaths = [join6(getAgentDir(), "settings.json"), join6(opts.cwd, ".pi", "settings.json")];
+  const settingsPaths = [join7(getAgentDir(), "settings.json"), join7(opts.cwd, ".pi", "settings.json")];
   for (const settingsPath of settingsPaths) {
     try {
       const settings = JSON.parse(readFileSync6(settingsPath, "utf-8"));
@@ -3100,7 +3133,7 @@ function readNearestPackageJson(metaUrl) {
   try {
     let dir = dirname2(fileURLToPath(metaUrl));
     for (let i = 0; i < 6; i++) {
-      const p = join6(dir, "package.json");
+      const p = join7(dir, "package.json");
       if (existsSync4(p)) {
         const json = JSON.parse(readFileSync6(p, "utf-8"));
         return { name: json?.name, version: json?.version };

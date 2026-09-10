@@ -10,6 +10,6 @@ export function getPiAcpDir(): string {
   return join(homedir(), '.pi', 'pi-acp')
 }
 
-export function getPiAcpSessionMapPath(): string {
-  return join(getPiAcpDir(), 'session-map.json')
+export function getPiAcpSessionsDir(): string {
+  return join(getPiAcpDir(), 'sessions')
 }

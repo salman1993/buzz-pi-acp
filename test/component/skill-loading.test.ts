@@ -5,6 +5,7 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { createInterface } from 'node:readline'
+import { SessionStore } from '../../src/acp/session-store.js'
 
 test(
   'real ACP loads launch skills in new sessions, restored sessions, and after restart',
@@ -132,8 +133,9 @@ test(
       assert.equal(typeof sessionId, 'string')
       const id = sessionId as string
       await client.checkSkills(id)
-      const store = JSON.parse(readFileSync(join(home, '.pi/pi-acp/session-map.json'), 'utf-8'))
-      const transcript = store.sessions[id].sessionFile as string
+      const stored = new SessionStore(join(home, '.pi/pi-acp/sessions')).get(id)
+      assert.ok(stored)
+      const transcript = stored.sessionFile
       const timestamp = '2026-01-01T00:00:00.000Z'
       writeFileSync(
         transcript,
