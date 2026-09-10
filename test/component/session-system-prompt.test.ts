@@ -9,7 +9,7 @@ import { SessionStore } from '../../src/acp/session-store.js'
 import { PiRpcProcess } from '../../src/pi-rpc/process.js'
 import { asAgentConn, FakeAgentSideConnection, FakePiRpcProcess } from '../helpers/fakes.js'
 
-test('client prompts survive A/B switching, explicit load, and adapter restart', async t => {
+test('client prompts preserve their mode through explicit load and adapter restart', async t => {
   const root = mkdtempSync(join(tmpdir(), 'pi-acp-session-prompt-'))
   t.after(() => rmSync(root, { recursive: true, force: true }))
   const path = join(root, 'map.json')
@@ -52,20 +52,20 @@ test('client prompts survive A/B switching, explicit load, and adapter restart',
   const a = await agent.newSession({
     cwd: root,
     mcpServers: [],
-    _meta: { systemPrompt: 'prompt A', sessionTitle: 'A' }
+    _meta: { systemPrompt: { append: 'prompt A' }, sessionTitle: 'A' }
   } as Parameters<typeof agent.newSession>[0])
   assert.equal(disposed, 0)
   await agent.setSessionMode({ sessionId: a.sessionId, modeId: 'medium' })
   assert.deepEqual(
     calls.map(call => call.systemPrompt),
-    ['prompt A']
+    [{ mode: 'append', text: 'prompt A' }]
   )
   agent.dispose()
   const restarted = createAgent()
   await restarted.loadSession({ cwd: root, sessionId: a.sessionId, mcpServers: [] })
-  assert.equal(calls.at(-1)?.systemPrompt, 'prompt A')
+  assert.deepEqual(calls.at(-1)?.systemPrompt, { mode: 'append', text: 'prompt A' })
   assert.ok(calls.every(call => JSON.stringify(call.piArgs) === JSON.stringify(['--skill', '/launch skills'])))
-  assert.equal(new SessionStore(path).get('a')?.systemPrompt, 'prompt A')
+  assert.deepEqual(new SessionStore(path).get('a')?.systemPrompt, { mode: 'append', text: 'prompt A' })
   await restarted.deleteSession({ sessionId: a.sessionId })
   assert.equal(new SessionStore(path).get('a'), null)
   await new Promise(resolve => setTimeout(resolve, 10))

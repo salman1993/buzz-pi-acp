@@ -1,19 +1,36 @@
 import { chmodSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { getPiAcpSessionMapPath } from './paths.js'
+import type { SystemPrompt } from './system-prompt.js'
 
 export type StoredSession = {
   sessionId: string
   cwd: string
   sessionFile: string
   updatedAt: string
-  systemPrompt?: string
+  systemPrompt?: SystemPrompt
   sessionTitle?: string
 }
 
 type SessionMapFile = {
   version: 1
   sessions: Record<string, StoredSession>
+}
+
+function normalizeSystemPrompt(value: unknown): SystemPrompt | undefined {
+  if (typeof value === 'string' && value.trim()) {
+    return { mode: 'replace', text: value }
+  }
+  if (typeof value !== 'object' || value === null) return undefined
+  const prompt = value as { mode?: unknown; text?: unknown }
+  if (
+    (prompt.mode === 'append' || prompt.mode === 'replace') &&
+    typeof prompt.text === 'string' &&
+    prompt.text.trim()
+  ) {
+    return { mode: prompt.mode, text: prompt.text }
+  }
+  return undefined
 }
 
 function ensureParentDir(path: string) {
@@ -48,18 +65,21 @@ export class SessionStore {
 
   get(sessionId: string): StoredSession | null {
     const db = loadFile(this.path)
-    return db.sessions[sessionId] ?? null
+    const stored = db.sessions[sessionId]
+    if (!stored) return null
+    const systemPrompt = normalizeSystemPrompt(stored.systemPrompt)
+    return { ...stored, systemPrompt }
   }
 
   upsert(entry: {
     sessionId: string
     cwd: string
     sessionFile: string
-    systemPrompt?: string
+    systemPrompt?: SystemPrompt
     sessionTitle?: string
   }): void {
     const db = loadFile(this.path)
-    const systemPrompt = entry.systemPrompt ?? db.sessions[entry.sessionId]?.systemPrompt
+    const systemPrompt = entry.systemPrompt ?? normalizeSystemPrompt(db.sessions[entry.sessionId]?.systemPrompt)
     const sessionTitle = entry.sessionTitle ?? db.sessions[entry.sessionId]?.sessionTitle
     db.sessions[entry.sessionId] = {
       sessionId: entry.sessionId,

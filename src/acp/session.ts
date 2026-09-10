@@ -27,6 +27,7 @@ import {
   isBashTool
 } from './translate/bash.js'
 import { toolResultToText } from './translate/pi-tools.js'
+import type { SystemPrompt } from './system-prompt.js'
 
 type SessionCreateParams = {
   cwd: string
@@ -35,7 +36,7 @@ type SessionCreateParams = {
   fileCommands?: import('./slash-commands.js').FileSlashCommand[]
   piCommand?: string
   piArgs?: readonly string[]
-  systemPrompt?: string
+  systemPrompt?: SystemPrompt
 }
 
 export type StopReason = 'end_turn' | 'cancelled' | 'error'
