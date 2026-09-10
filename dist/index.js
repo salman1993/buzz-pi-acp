@@ -385,7 +385,7 @@ import { dirname, join as join3 } from "path";
 import { homedir } from "os";
 import { join as join2 } from "path";
 function getPiAcpDir() {
-  return join2(homedir(), ".pi", "pi-acp");
+  return join2(homedir(), ".pi", "buzz-pi-acp");
 }
 function getPiAcpSessionsDir() {
   return join2(getPiAcpDir(), "sessions");
