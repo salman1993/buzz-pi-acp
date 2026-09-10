@@ -7,7 +7,7 @@ let launchArgs: LaunchArgs
 try {
   launchArgs = parseLaunchArgs(process.argv.slice(2))
 } catch (error) {
-  process.stderr.write(`pi-acp: ${error instanceof Error ? error.message : String(error)}\n`)
+  process.stderr.write(`buzz-pi-acp: ${error instanceof Error ? error.message : String(error)}\n`)
   process.exit(1)
 }
 // Terminal Auth entrypoint. The ACP client launches the agent with `--terminal-login`.
@@ -22,7 +22,7 @@ if (launchArgs.terminalLogin) {
 
   if ((res as any).error && (res as any).error.code === 'ENOENT') {
     process.stderr.write(
-      `pi-acp: could not start pi (command not found: ${cmd}). Install it via \`npm install -g @earendil-works/pi-coding-agent\` or ensure \`pi\` is on your PATH.\n`
+      `buzz-pi-acp: could not start pi (command not found: ${cmd}). Install it via \`npm install -g @earendil-works/pi-coding-agent\` or ensure \`pi\` is on your PATH.\n`
     )
     process.exit(1)
   }

@@ -41,6 +41,7 @@ test('client prompts preserve their mode through explicit load and adapter resta
   }
   const agent = createAgent()
   const initialized = await agent.initialize({ protocolVersion: 1, clientCapabilities: {} })
+  assert.equal(initialized.agentInfo?.name, 'buzz-pi-acp')
   assert.equal(initialized.agentCapabilities?._meta, undefined)
   await assert.rejects(
     agent.newSession({ cwd: root, mcpServers: [], _meta: { systemPrompt: null } } as Parameters<

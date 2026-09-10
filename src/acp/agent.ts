@@ -264,7 +264,7 @@ export class PiAcpAgent implements ACPAgent {
     return {
       protocolVersion: requested === supportedVersion ? requested : supportedVersion,
       agentInfo: {
-        name: pkg.name ?? 'pi-acp',
+        name: pkg.name ?? 'buzz-pi-acp',
         title: 'pi ACP adapter',
         version: pkg.version ?? '0.0.0'
       },
@@ -1706,5 +1706,5 @@ function readNearestPackageJson(metaUrl: string): {
   } catch {
     // ignore
   }
-  return { name: 'pi-acp', version: '0.0.0' }
+  return { name: 'buzz-pi-acp', version: '0.0.0' }
 }

@@ -54,6 +54,6 @@ function terminalAuthLaunchSpec(): { command: string; args: string[] } {
     }
   }
 
-  // Fallback: assume `pi-acp` is on PATH.
-  return { command: 'pi-acp', args: ['--terminal-login'] }
+  // Fallback: assume `buzz-pi-acp` is on PATH.
+  return { command: 'buzz-pi-acp', args: ['--terminal-login'] }
 }

@@ -43,7 +43,7 @@ function terminalAuthLaunchSpec() {
       return { command: argv0, args: [argv1, "--terminal-login"] };
     }
   }
-  return { command: "pi-acp", args: ["--terminal-login"] };
+  return { command: "buzz-pi-acp", args: ["--terminal-login"] };
 }
 
 // src/acp/session.ts
@@ -1774,7 +1774,7 @@ ${r.text}`;
       case "audio": {
         const bytes = Buffer.byteLength(b.data, "base64");
         message += `
-[Audio] (${b.mimeType}, ${bytes} bytes) not supported by pi-acp`;
+[Audio] (${b.mimeType}, ${bytes} bytes) not supported by buzz-pi-acp`;
         break;
       }
       default:
@@ -2035,7 +2035,7 @@ var PiAcpAgent = class {
     return {
       protocolVersion: requested === supportedVersion ? requested : supportedVersion,
       agentInfo: {
-        name: pkg.name ?? "pi-acp",
+        name: pkg.name ?? "buzz-pi-acp",
         title: "pi ACP adapter",
         version: pkg.version ?? "0.0.0"
       },
@@ -3109,7 +3109,7 @@ function readNearestPackageJson(metaUrl) {
     }
   } catch {
   }
-  return { name: "pi-acp", version: "0.0.0" };
+  return { name: "buzz-pi-acp", version: "0.0.0" };
 }
 
 // src/launch-args.ts
@@ -3140,12 +3140,12 @@ function parseLaunchArgs(argv) {
   const separator = argv.indexOf("--");
   const adapterArgs = separator === -1 ? argv : argv.slice(0, separator);
   for (const arg of adapterArgs) {
-    if (arg !== "--terminal-login") throw new Error(`Unknown pi-acp argument: ${arg}. Pass Pi options after --.`);
+    if (arg !== "--terminal-login") throw new Error(`Unknown buzz-pi-acp argument: ${arg}. Pass Pi options after --.`);
   }
   const piArgs = separator === -1 ? [] : argv.slice(separator + 1);
   for (const arg of piArgs) {
     if (RESERVED_FLAGS.has(arg.split("=")[0]) || arg === "--") {
-      throw new Error(`Pi option ${arg} is managed by pi-acp and cannot be forwarded.`);
+      throw new Error(`Pi option ${arg} is managed by buzz-pi-acp and cannot be forwarded.`);
     }
   }
   return { terminalLogin: adapterArgs.includes("--terminal-login"), piArgs };
@@ -3156,7 +3156,7 @@ var launchArgs;
 try {
   launchArgs = parseLaunchArgs(process.argv.slice(2));
 } catch (error) {
-  process.stderr.write(`pi-acp: ${error instanceof Error ? error.message : String(error)}
+  process.stderr.write(`buzz-pi-acp: ${error instanceof Error ? error.message : String(error)}
 `);
   process.exit(1);
 }
@@ -3170,7 +3170,7 @@ if (launchArgs.terminalLogin) {
   });
   if (res.error && res.error.code === "ENOENT") {
     process.stderr.write(
-      `pi-acp: could not start pi (command not found: ${cmd}). Install it via \`npm install -g @earendil-works/pi-coding-agent\` or ensure \`pi\` is on your PATH.
+      `buzz-pi-acp: could not start pi (command not found: ${cmd}). Install it via \`npm install -g @earendil-works/pi-coding-agent\` or ensure \`pi\` is on your PATH.
 `
     );
     process.exit(1);
