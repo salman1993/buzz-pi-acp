@@ -133,7 +133,7 @@ test(
       assert.equal(typeof sessionId, 'string')
       const id = sessionId as string
       await client.checkSkills(id)
-      const stored = new SessionStore(join(home, '.pi/pi-acp/sessions')).get(id)
+      const stored = new SessionStore(join(home, '.pi/buzz-pi-acp/sessions')).get(id)
       assert.ok(stored)
       const transcript = stored.sessionFile
       const timestamp = '2026-01-01T00:00:00.000Z'

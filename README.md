@@ -54,7 +54,7 @@ The value is trimmed, collapsed to single spaces, and truncated to 256 character
 
 ### Concurrent session metadata
 
-Unlike upstream pi-acp, this fork stores restore metadata in one atomic file per session under `~/.pi/pi-acp/sessions/`. Separate Buzz workers therefore cannot overwrite unrelated session prompts or titles.
+Unlike upstream pi-acp, this fork stores restore metadata in one atomic file per session under `~/.pi/buzz-pi-acp/sessions/`. Separate Buzz workers therefore cannot overwrite unrelated session prompts or titles.
 
 ### Forwarding Pi launch options
 
