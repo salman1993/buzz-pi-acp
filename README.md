@@ -21,6 +21,10 @@ Install this adapter directly from the fork:
 npm install -g --install-links=true git+https://github.com/salman1993/buzz-pi-acp.git#main
 ```
 
+> [!IMPORTANT]
+> Both `pi` and `buzz-pi-acp` install to npm's global bin directory. Make sure it
+> (`npm bin -g`) is on your `PATH` so Buzz can launch them.
+
 Restart Buzz, then select **Pi** as the agent harness. Buzz starts `buzz-pi-acp` automatically.
 
 Run the same install command again to update the adapter.
