@@ -1,4 +1,4 @@
-# buzz-pi-acp for Buzz
+# buzz-pi-acp
 
 An [Agent Client Protocol](https://agentclientprotocol.com/) adapter for the [Pi coding agent](https://github.com/earendil-works/pi).
 
@@ -18,7 +18,7 @@ pi
 Install this adapter directly from the fork:
 
 ```bash
-npm install -g --install-links=true git+https://github.com/salman1993/pi-acp.git#main
+npm install -g --install-links=true git+https://github.com/salman1993/buzz-pi-acp.git#main
 ```
 
 Restart Buzz, then select **Pi** as the agent harness. Buzz starts `buzz-pi-acp` automatically.
