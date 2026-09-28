@@ -31,6 +31,10 @@ Run the same install command again to update the adapter.
 
 ## Fork additions
 
+### Steering
+
+Buzz can steer an active Pi turn without cancelling it. The adapter advertises `_meta.steering.supported` and forwards `_session/steering` messages to Pi's native RPC `steer` command.
+
 ### Client system prompts
 
 Buzz can replace or extend Pi's system prompt through the provisional `session/new.params._meta.systemPrompt` field:
