@@ -245,6 +245,10 @@ var PiRpcProcess = class _PiRpcProcess {
     const res = await this.request({ type: "prompt", message, images });
     if (!res.success) throw new Error(`pi prompt failed: ${res.error ?? JSON.stringify(res.data)}`);
   }
+  async steer(message, images = []) {
+    const res = await this.request({ type: "steer", message, images });
+    if (!res.success) throw new Error(`pi steer failed: ${res.error ?? JSON.stringify(res.data)}`);
+  }
   async abort() {
     const res = await this.request({ type: "abort" });
     if (!res.success) throw new Error(`pi abort failed: ${res.error ?? JSON.stringify(res.data)}`);
@@ -888,6 +892,12 @@ var PiAcpSession = class {
   // when retry, compaction, or queued continuations run. The session-level prompt
   // completes only when `agent_settled` is emitted.
   inAgentLoop = false;
+  get hasPendingTurn() {
+    return this.pendingTurn !== null;
+  }
+  get hasActiveAgentLoop() {
+    return this.pendingTurn !== null && this.inAgentLoop && !this.cancelRequested;
+  }
   // For ACP diff support: capture file contents before edit/write mutations,
   // then emit ToolCallContent {type:"diff"}. Compatible structured edit/write
   // events may need to be implemented in pi in the future.
@@ -946,6 +956,21 @@ var PiAcpSession = class {
       this.startTurn(queued);
     });
     return turnPromise;
+  }
+  async startDetachedPrompt(message, images = []) {
+    if (this.pendingTurn) throw new Error("Cannot start a new prompt while a turn is pending");
+    const expandedMessage = expandSlashCommand(message, this.fileCommands);
+    await new Promise((resolve4, reject) => {
+      this.startTurn({
+        message: expandedMessage,
+        images,
+        resolve: () => {
+        },
+        reject: () => {
+        },
+        accepted: { resolve: resolve4, reject }
+      });
+    });
   }
   async cancel() {
     this.cancelRequested = true;
@@ -1021,7 +1046,8 @@ var PiAcpSession = class {
       sessionUpdate: "session_info_update",
       _meta: { piAcp: { queueDepth: this.turnQueue.length, running: true } }
     });
-    this.proc.prompt(t.message, t.images).catch((err) => {
+    this.proc.prompt(t.message, t.images).then(() => t.accepted?.resolve()).catch((err) => {
+      t.accepted?.reject(err);
       void this.flushEmits().finally(() => {
         const authErr = maybeAuthRequiredError(err);
         if (authErr) {
@@ -2067,6 +2093,7 @@ var PiAcpAgent = class {
     const requested = params.protocolVersion;
     return {
       protocolVersion: requested === supportedVersion ? requested : supportedVersion,
+      _meta: { steering: { supported: true } },
       agentInfo: {
         name: pkg.name ?? "buzz-pi-acp",
         title: "pi ACP adapter",
@@ -2093,6 +2120,39 @@ var PiAcpAgent = class {
         }
       }
     };
+  }
+  async extMethod(method, params) {
+    if (method !== "_session/steering") throw RequestError4.methodNotFound(method);
+    const sessionId = params.sessionId;
+    if (typeof sessionId !== "string" || !sessionId) {
+      throw RequestError4.invalidParams("_session/steering requires a sessionId");
+    }
+    if (!Array.isArray(params.prompt) || params.prompt.length === 0) {
+      throw RequestError4.invalidParams("_session/steering requires a non-empty prompt");
+    }
+    const { message, images } = promptToPiMessage(params.prompt);
+    if (!message.trim() && images.length === 0) {
+      throw RequestError4.invalidParams("_session/steering requires text or an image");
+    }
+    const session = await this.restoreSession(sessionId);
+    if (session.hasActiveAgentLoop) {
+      try {
+        await session.proc.steer(message, images);
+      } catch (error) {
+        throw RequestError4.internalError({}, error instanceof Error ? error.message : String(error));
+      }
+      return { outcome: "injected" };
+    }
+    const meta = params._meta;
+    if (session.hasPendingTurn || meta?.steering?.idleBehavior === "promptRequired") {
+      return { outcome: "promptRequired", reason: "noRunningTurn" };
+    }
+    try {
+      await session.startDetachedPrompt(message, images);
+    } catch (error) {
+      throw RequestError4.internalError({}, error instanceof Error ? error.message : String(error));
+    }
+    return { outcome: "startedNewTurn" };
   }
   async newSession(params) {
     const systemPrompt = parseSystemPrompt(params._meta?.systemPrompt);
