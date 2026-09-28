@@ -2,6 +2,7 @@ import {
   RequestError,
   type Agent as ACPAgent,
   type AgentSideConnection,
+  type ContentBlock,
   type AuthenticateRequest,
   type CancelNotification,
   type InitializeRequest,
@@ -263,6 +264,7 @@ export class PiAcpAgent implements ACPAgent {
 
     return {
       protocolVersion: requested === supportedVersion ? requested : supportedVersion,
+      _meta: { steering: { supported: true } },
       agentInfo: {
         name: pkg.name ?? 'buzz-pi-acp',
         title: 'pi ACP adapter',
@@ -289,6 +291,45 @@ export class PiAcpAgent implements ACPAgent {
         }
       }
     }
+  }
+
+  async extMethod(method: string, params: Record<string, unknown>): Promise<Record<string, unknown>> {
+    if (method !== '_session/steering') throw RequestError.methodNotFound(method)
+
+    const sessionId = params.sessionId
+    if (typeof sessionId !== 'string' || !sessionId) {
+      throw RequestError.invalidParams('_session/steering requires a sessionId')
+    }
+    if (!Array.isArray(params.prompt) || params.prompt.length === 0) {
+      throw RequestError.invalidParams('_session/steering requires a non-empty prompt')
+    }
+
+    const { message, images } = promptToPiMessage(params.prompt as ContentBlock[])
+    if (!message.trim() && images.length === 0) {
+      throw RequestError.invalidParams('_session/steering requires text or an image')
+    }
+
+    const session = await this.restoreSession(sessionId)
+    if (session.hasActiveAgentLoop) {
+      try {
+        await session.proc.steer(message, images)
+      } catch (error) {
+        throw RequestError.internalError({}, error instanceof Error ? error.message : String(error))
+      }
+      return { outcome: 'injected' }
+    }
+
+    const meta = params._meta as { steering?: { idleBehavior?: string } } | undefined
+    if (session.hasPendingTurn || meta?.steering?.idleBehavior === 'promptRequired') {
+      return { outcome: 'promptRequired', reason: 'noRunningTurn' }
+    }
+
+    try {
+      await session.startDetachedPrompt(message, images)
+    } catch (error) {
+      throw RequestError.internalError({}, error instanceof Error ? error.message : String(error))
+    }
+    return { outcome: 'startedNewTurn' }
   }
 
   async newSession(params: NewSessionRequest) {
