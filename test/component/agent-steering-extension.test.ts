@@ -131,6 +131,28 @@ test('a queued steer still pending at settlement replays once', async () => {
   assert.equal(deliveries(proc, 'Second'), 1)
 })
 
+test('a steer an input extension handles is never replayed', async () => {
+  const { agent, proc, session } = setup()
+  proc.handledByExtension.add('B')
+  const running = session.prompt('Original request')
+  proc.emit({ type: 'agent_start' })
+
+  await agent.extMethod('_session/steering', { sessionId: 's1', prompt: [{ type: 'text', text: 'A' }] })
+  await agent.extMethod('_session/steering', { sessionId: 's1', prompt: [{ type: 'text', text: 'B' }] })
+  proc.emit({ type: 'agent_settled' })
+  await new Promise(resolve => setImmediate(resolve))
+
+  assert.deepEqual(
+    proc.prompts.map(p => p.message),
+    ['Original request', 'A']
+  )
+  proc.emit({ type: 'agent_start' })
+  proc.emit({ type: 'agent_settled' })
+  assert.equal(await running, 'end_turn')
+  assert.equal(deliveries(proc, 'A'), 1)
+  assert.equal(deliveries(proc, 'B'), 0)
+})
+
 test('steers outside the running Pi loop are rejected without cancelling the turn', async () => {
   const { agent, proc, session } = setup()
   const running = session.prompt('Original request')
