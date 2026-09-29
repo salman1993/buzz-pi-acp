@@ -33,7 +33,9 @@ Run the same install command again to update the adapter.
 
 ### Steering
 
-Buzz can steer an active Pi turn without cancelling it. The adapter advertises `_meta.steering.supported` and forwards `_session/steering` messages to Pi's native RPC `steer` command. When no Pi agent loop is active, `_session/steering` returns `{ "outcome": "promptRequired", "reason": "noRunningTurn" }` so Buzz can send the message as a normal prompt. The adapter does not start a new turn for an idle steer.
+Buzz can steer an active Pi turn without cancelling it. The adapter advertises `_meta.steering.supported` and forwards `_session/steering` messages to Pi's native RPC `steer` command. Pi can accept a steer after its final queue drain, so when Pi settles the adapter calls `clear_queue` and sends any unconsumed steers as a follow-up prompt within the same ACP turn. Each acknowledged steer is delivered once.
+
+When no ACP turn is running, `_session/steering` returns `{ "outcome": "promptRequired", "reason": "noRunningTurn" }` so Buzz can send the message as a normal prompt. While a turn is starting, settling, or cancelled, it returns a JSON-RPC error so Buzz delivers the message after the turn. Cancelling a turn drops its unconsumed steers.
 
 ### Client system prompts
 

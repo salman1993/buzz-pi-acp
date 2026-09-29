@@ -310,16 +310,19 @@ export class PiAcpAgent implements ACPAgent {
     }
 
     const session = await this.restoreSession(sessionId)
-    if (session.hasActiveAgentLoop) {
-      try {
-        await session.proc.steer(message, images)
-      } catch (error) {
-        throw RequestError.internalError({}, error instanceof Error ? error.message : String(error))
-      }
-      return { outcome: 'injected' }
+    if (!session.hasPendingTurn) return { outcome: 'promptRequired', reason: 'noRunningTurn' }
+
+    // Buzz redelivers a rejected steer after the turn without cancelling it.
+    if (!session.hasActiveAgentLoop) {
+      throw RequestError.invalidRequest({ reason: 'turnNotSteerable' }, 'Pi turn is starting, settling, or cancelled')
     }
 
-    return { outcome: 'promptRequired', reason: 'noRunningTurn' }
+    try {
+      await session.steer(message, images)
+    } catch (error) {
+      throw RequestError.internalError({}, error instanceof Error ? error.message : String(error))
+    }
+    return { outcome: 'injected' }
   }
 
   async newSession(params: NewSessionRequest) {

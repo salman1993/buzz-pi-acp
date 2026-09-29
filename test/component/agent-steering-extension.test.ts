@@ -33,6 +33,16 @@ test('initialize advertises the steering extension', async () => {
   assert.deepEqual(response._meta?.steering, { supported: true })
 })
 
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>(r => (resolve = r))
+  return { promise, resolve }
+}
+
+function deliveries(proc: FakePiRpcProcess, text: string): number {
+  return proc.consumed.filter(m => m === text).length + proc.prompts.filter(p => p.message === text).length
+}
+
 test('an active turn uses Pi steer without cancelling or starting another turn', async () => {
   const { agent, proc, session } = setup()
   const running = session.prompt('Original request')
@@ -46,36 +56,118 @@ test('an active turn uses Pi steer without cancelling or starting another turn',
 
   assert.deepEqual(result, { outcome: 'injected' })
   assert.deepEqual(proc.steers, [{ message: 'Change direction', attachments: [image] }])
-  assert.deepEqual(proc.prompts, [{ message: 'Original request', attachments: [] }])
   assert.equal(proc.abortCount, 0)
 
+  proc.consumeSteers()
   proc.emit({ type: 'agent_end' })
   proc.emit({ type: 'agent_settled' })
   assert.equal(await running, 'end_turn')
+  assert.deepEqual(proc.prompts, [{ message: 'Original request', attachments: [] }])
+  assert.equal(deliveries(proc, 'Change direction'), 1)
 })
 
-test('startup and settlement gaps request a trackable prompt instead of queueing an idle Pi steer', async () => {
+test('a steer Pi accepts after its final drain replays once before the turn completes', async () => {
+  const { agent, proc, session } = setup()
+  const running = session.prompt('Original request')
+  proc.emit({ type: 'agent_start' })
+
+  const image = { type: 'image', mimeType: 'image/png', data: 'aGk=' }
+  const steerSent = deferred<void>()
+  const piSteer = deferred<void>()
+  const queueSteer = proc.steer.bind(proc)
+  proc.steer = async (message, attachments) => {
+    steerSent.resolve()
+    await piSteer.promise
+    return queueSteer(message, attachments)
+  }
+
+  const order: string[] = []
+  const ack = agent
+    .extMethod('_session/steering', { sessionId: 's1', prompt: [{ type: 'text', text: 'Change direction' }, image] })
+    .then(result => {
+      order.push('ack')
+      return result
+    })
+  void running.then(() => order.push('prompt'))
+
+  await steerSent.promise
+  proc.emit({ type: 'agent_end' })
+  proc.emit({ type: 'agent_settled' })
+  piSteer.resolve()
+
+  assert.deepEqual(await ack, { outcome: 'injected' })
+  await new Promise(resolve => setImmediate(resolve))
+  assert.deepEqual(proc.calls, ['clear_queue'])
+  assert.deepEqual(proc.steeringQueue, [])
+  assert.deepEqual(proc.prompts[1], { message: 'Change direction', attachments: [image] })
+
+  proc.emit({ type: 'agent_start' })
+  proc.emit({ type: 'agent_end' })
+  proc.emit({ type: 'agent_settled' })
+  assert.equal(await running, 'end_turn')
+  assert.deepEqual(order, ['ack', 'prompt'])
+  assert.equal(deliveries(proc, 'Change direction'), 1)
+})
+
+test('a queued steer still pending at settlement replays once', async () => {
+  const { agent, proc, session } = setup()
+  const running = session.prompt('Original request')
+  proc.emit({ type: 'agent_start' })
+
+  await agent.extMethod('_session/steering', { sessionId: 's1', prompt: [{ type: 'text', text: 'First' }] })
+  proc.consumeSteers()
+  await agent.extMethod('_session/steering', { sessionId: 's1', prompt: [{ type: 'text', text: 'Second' }] })
+  proc.emit({ type: 'agent_settled' })
+  await new Promise(resolve => setImmediate(resolve))
+
+  assert.deepEqual(
+    proc.prompts.map(p => p.message),
+    ['Original request', 'Second']
+  )
+  proc.emit({ type: 'agent_start' })
+  proc.emit({ type: 'agent_settled' })
+  assert.equal(await running, 'end_turn')
+  assert.equal(deliveries(proc, 'First'), 1)
+  assert.equal(deliveries(proc, 'Second'), 1)
+})
+
+test('steers outside the running Pi loop are rejected without cancelling the turn', async () => {
   const { agent, proc, session } = setup()
   const running = session.prompt('Original request')
 
-  assert.deepEqual(await agent.extMethod('_session/steering', steeringParams), {
-    outcome: 'promptRequired',
-    reason: 'noRunningTurn'
-  })
-  proc.emit({ type: 'agent_start' })
-  proc.emit({ type: 'agent_end' })
-  assert.deepEqual(await agent.extMethod('_session/steering', steeringParams), {
-    outcome: 'promptRequired',
-    reason: 'noRunningTurn'
-  })
-  assert.equal(proc.steers.length, 0)
-  assert.equal(proc.prompts.length, 1)
+  await assert.rejects(agent.extMethod('_session/steering', steeringParams), /turnNotSteerable|starting, settling/)
 
+  proc.emit({ type: 'agent_start' })
+  await agent.extMethod('_session/steering', steeringParams)
+  const clearQueue = deferred<{ steering: string[]; followUp: string[] }>()
+  proc.clearQueue = () => clearQueue.promise
   proc.emit({ type: 'agent_settled' })
-  await running
+
+  await assert.rejects(agent.extMethod('_session/steering', steeringParams), /starting, settling/)
+  assert.equal(proc.steers.length, 1)
+  assert.equal(proc.abortCount, 0)
+
+  clearQueue.resolve({ steering: [], followUp: [] })
+  assert.equal(await running, 'end_turn')
 })
 
-test('idle steering without metadata requests a normal prompt, including after settlement', async () => {
+test('cancel drops acknowledged steers before aborting', async () => {
+  const { agent, proc, session } = setup()
+  const running = session.prompt('Original request')
+  proc.emit({ type: 'agent_start' })
+  await agent.extMethod('_session/steering', steeringParams)
+
+  await session.cancel()
+  assert.deepEqual(proc.calls, ['clear_queue', 'abort'])
+
+  proc.emit({ type: 'agent_end' })
+  proc.emit({ type: 'agent_settled' })
+  assert.equal(await running, 'cancelled')
+  assert.deepEqual(proc.prompts, [{ message: 'Original request', attachments: [] }])
+  assert.equal(deliveries(proc, 'Change direction'), 0)
+})
+
+test('idle steering requests a normal prompt, including after settlement', async () => {
   const { agent, proc, session } = setup()
   const promptRequired = { outcome: 'promptRequired', reason: 'noRunningTurn' }
 
@@ -86,7 +178,6 @@ test('idle steering without metadata requests a normal prompt, including after s
   proc.emit({ type: 'agent_start' })
   proc.emit({ type: 'agent_end' })
   proc.emit({ type: 'agent_settled' })
-  assert.deepEqual(await agent.extMethod('_session/steering', steeringParams), promptRequired)
   await running
 
   assert.deepEqual(await agent.extMethod('_session/steering', steeringParams), promptRequired)
@@ -105,7 +196,8 @@ test('Pi rejection does not acknowledge delivery', async () => {
   await assert.rejects(agent.extMethod('_session/steering', steeringParams), /steer rejected/)
   proc.emit({ type: 'agent_end' })
   proc.emit({ type: 'agent_settled' })
-  await running
+  assert.equal(await running, 'end_turn')
+  assert.deepEqual(proc.calls, [])
 })
 
 test('invalid extension calls fail without contacting Pi', async () => {

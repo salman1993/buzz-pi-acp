@@ -248,6 +248,13 @@ var PiRpcProcess = class _PiRpcProcess {
   async steer(message, images = []) {
     const res = await this.request({ type: "steer", message, images });
     if (!res.success) throw new Error(`pi steer failed: ${res.error ?? JSON.stringify(res.data)}`);
+    return res.data?.disposition === "handled" ? "handled" : "queued";
+  }
+  async clearQueue() {
+    const res = await this.request({ type: "clear_queue" });
+    if (!res.success) throw new Error(`pi clear_queue failed: ${res.error ?? JSON.stringify(res.data)}`);
+    const data = res.data ?? {};
+    return { steering: data.steering ?? [], followUp: data.followUp ?? [] };
   }
   async abort() {
     const res = await this.request({ type: "abort" });
@@ -890,10 +897,27 @@ var PiAcpSession = class {
   currentToolCalls = /* @__PURE__ */ new Map();
   // pi can emit multiple `turn_end` and `agent_end` events for a single user prompt
   // when retry, compaction, or queued continuations run. The session-level prompt
-  // completes only when `agent_settled` is emitted.
+  // completes only when `agent_settled` is emitted, so the loop spans `agent_start`
+  // through `agent_settled`.
   inAgentLoop = false;
+  // pi accepts a steer even after its final queue drain, leaving it queued for the
+  // next prompt. Settlement clears pi's queue and replays those steers in this turn.
+  turnSteers = [];
+  inflightSteers = /* @__PURE__ */ new Set();
+  get hasPendingTurn() {
+    return this.pendingTurn !== null;
+  }
   get hasActiveAgentLoop() {
     return this.pendingTurn !== null && this.inAgentLoop && !this.cancelRequested;
+  }
+  async steer(message, images) {
+    const sent = this.proc.steer(message, images);
+    this.inflightSteers.add(sent);
+    try {
+      if (await sent === "queued") this.turnSteers.push({ message, images });
+    } finally {
+      this.inflightSteers.delete(sent);
+    }
   }
   // For ACP diff support: capture file contents before edit/write mutations,
   // then emit ToolCallContent {type:"diff"}. Compatible structured edit/write
@@ -968,6 +992,7 @@ var PiAcpSession = class {
         _meta: { piAcp: { queueDepth: 0, running: Boolean(this.pendingTurn) } }
       });
     }
+    if (this.turnSteers.length) await this.proc.clearQueue().catch(() => void 0);
     await this.proc.abort();
   }
   wasCancelRequested() {
@@ -1022,13 +1047,17 @@ var PiAcpSession = class {
   }
   startTurn(t) {
     this.cancelRequested = false;
-    this.inAgentLoop = false;
+    this.turnSteers = [];
     this.pendingTurn = { resolve: t.resolve, reject: t.reject };
     this.emit({
       sessionUpdate: "session_info_update",
       _meta: { piAcp: { queueDepth: this.turnQueue.length, running: true } }
     });
-    this.proc.prompt(t.message, t.images).catch((err) => {
+    this.sendPrompt(t.message, t.images);
+  }
+  sendPrompt(message, images) {
+    this.inAgentLoop = false;
+    this.proc.prompt(message, images).catch((err) => {
       void this.flushEmits().finally(() => {
         const authErr = maybeAuthRequiredError(err);
         if (authErr) {
@@ -1309,34 +1338,52 @@ var PiAcpSession = class {
       case "turn_end": {
         break;
       }
-      case "agent_end": {
-        this.inAgentLoop = false;
-        break;
-      }
       case "agent_settled": {
-        void this.flushEmits().finally(() => {
-          const reason = this.cancelRequested ? "cancelled" : "end_turn";
-          this.pendingTurn?.resolve(reason);
-          this.pendingTurn = null;
-          this.inAgentLoop = false;
-          const next = this.turnQueue.shift();
-          if (next) {
-            this.emit({
-              sessionUpdate: "agent_message_chunk",
-              content: { type: "text", text: `Starting queued message. (${this.turnQueue.length} remaining)` }
-            });
-            this.startTurn(next);
-          } else {
-            this.emit({
-              sessionUpdate: "session_info_update",
-              _meta: { piAcp: { queueDepth: 0, running: false } }
-            });
-          }
-        });
+        this.inAgentLoop = false;
+        void this.settleTurn();
         break;
       }
       default:
         break;
+    }
+  }
+  async settleTurn() {
+    await Promise.allSettled(this.inflightSteers);
+    const unconsumed = await this.takeUnconsumedSteers();
+    if (unconsumed.length && this.pendingTurn && !this.cancelRequested) {
+      this.sendPrompt(
+        unconsumed.map((s) => s.message).join("\n\n"),
+        unconsumed.flatMap((s) => s.images)
+      );
+      return;
+    }
+    await this.flushEmits();
+    const reason = this.cancelRequested ? "cancelled" : "end_turn";
+    this.pendingTurn?.resolve(reason);
+    this.pendingTurn = null;
+    const next = this.turnQueue.shift();
+    if (next) {
+      this.emit({
+        sessionUpdate: "agent_message_chunk",
+        content: { type: "text", text: `Starting queued message. (${this.turnQueue.length} remaining)` }
+      });
+      this.startTurn(next);
+    } else {
+      this.emit({
+        sessionUpdate: "session_info_update",
+        _meta: { piAcp: { queueDepth: 0, running: false } }
+      });
+    }
+  }
+  // pi consumes steers in order, so whatever remains queued is the tail of this turn's steers.
+  async takeUnconsumedSteers() {
+    const sent = this.turnSteers.splice(0);
+    if (!sent.length) return [];
+    try {
+      const { steering } = await this.proc.clearQueue();
+      return steering.length ? sent.slice(-steering.length) : [];
+    } catch {
+      return [];
     }
   }
   async handleExtensionUiRequest(ev) {
@@ -2116,15 +2163,16 @@ var PiAcpAgent = class {
       throw RequestError4.invalidParams("_session/steering requires text or an image");
     }
     const session = await this.restoreSession(sessionId);
-    if (session.hasActiveAgentLoop) {
-      try {
-        await session.proc.steer(message, images);
-      } catch (error) {
-        throw RequestError4.internalError({}, error instanceof Error ? error.message : String(error));
-      }
-      return { outcome: "injected" };
+    if (!session.hasPendingTurn) return { outcome: "promptRequired", reason: "noRunningTurn" };
+    if (!session.hasActiveAgentLoop) {
+      throw RequestError4.invalidRequest({ reason: "turnNotSteerable" }, "Pi turn is starting, settling, or cancelled");
     }
-    return { outcome: "promptRequired", reason: "noRunningTurn" };
+    try {
+      await session.steer(message, images);
+    } catch (error) {
+      throw RequestError4.internalError({}, error instanceof Error ? error.message : String(error));
+    }
+    return { outcome: "injected" };
   }
   async newSession(params) {
     const systemPrompt = parseSystemPrompt(params._meta?.systemPrompt);
