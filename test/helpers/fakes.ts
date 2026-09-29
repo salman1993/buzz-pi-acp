@@ -46,11 +46,29 @@ export class FakePiRpcProcess {
     this.prompts.push({ message, attachments })
   }
 
-  async steer(message: string, attachments: unknown[] = []): Promise<void> {
+  // Models pi's steering queue: `steer` enqueues, `consumeSteers` drains it into the
+  // run, and `clearQueue` returns and removes whatever pi did not consume.
+  readonly steeringQueue: string[] = []
+  readonly consumed: string[] = []
+  readonly calls: string[] = []
+
+  async steer(message: string, attachments: unknown[] = []): Promise<'queued' | 'handled'> {
     this.steers.push({ message, attachments })
+    this.steeringQueue.push(message)
+    return 'queued'
+  }
+
+  consumeSteers(): void {
+    this.consumed.push(...this.steeringQueue.splice(0))
+  }
+
+  async clearQueue(): Promise<{ steering: string[]; followUp: string[] }> {
+    this.calls.push('clear_queue')
+    return { steering: this.steeringQueue.splice(0), followUp: [] }
   }
 
   async abort(): Promise<void> {
+    this.calls.push('abort')
     this.abortCount += 1
   }
 

@@ -33,6 +33,7 @@ type PiRpcCommand =
   | { type: 'prompt'; id?: string; message: string; images?: unknown[] }
   | { type: 'steer'; id?: string; message: string; images?: unknown[] }
   | { type: 'abort'; id?: string }
+  | { type: 'clear_queue'; id?: string }
   | { type: 'get_state'; id?: string }
   // Model
   | { type: 'get_available_models'; id?: string }
@@ -251,9 +252,17 @@ export class PiRpcProcess {
     if (!res.success) throw new Error(`pi prompt failed: ${res.error ?? JSON.stringify(res.data)}`)
   }
 
-  async steer(message: string, images: unknown[] = []): Promise<void> {
+  async steer(message: string, images: unknown[] = []): Promise<'queued' | 'handled'> {
     const res = await this.request({ type: 'steer', message, images })
     if (!res.success) throw new Error(`pi steer failed: ${res.error ?? JSON.stringify(res.data)}`)
+    return (res.data as { disposition?: string } | undefined)?.disposition === 'handled' ? 'handled' : 'queued'
+  }
+
+  async clearQueue(): Promise<{ steering: string[]; followUp: string[] }> {
+    const res = await this.request({ type: 'clear_queue' })
+    if (!res.success) throw new Error(`pi clear_queue failed: ${res.error ?? JSON.stringify(res.data)}`)
+    const data = (res.data ?? {}) as { steering?: string[]; followUp?: string[] }
+    return { steering: data.steering ?? [], followUp: data.followUp ?? [] }
   }
 
   async abort(): Promise<void> {
