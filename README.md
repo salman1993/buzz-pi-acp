@@ -37,6 +37,8 @@ Buzz can steer an active Pi turn without cancelling it. The adapter advertises `
 
 When no ACP turn is running, `_session/steering` returns `{ "outcome": "promptRequired", "reason": "noRunningTurn" }` so Buzz can send the message as a normal prompt. While a turn is starting, settling, or cancelled, it returns a JSON-RPC error so Buzz delivers the message after the turn. Cancelling a turn drops its unconsumed steers.
 
+Steering requires Pi 0.99.0 or later. Older Pi does not report whether an extension handled a steer, so the adapter could replay the wrong message at settlement.
+
 ### Client system prompts
 
 Buzz can replace or extend Pi's system prompt through the provisional `session/new.params._meta.systemPrompt` field:

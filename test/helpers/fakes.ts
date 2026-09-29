@@ -51,9 +51,12 @@ export class FakePiRpcProcess {
   readonly steeringQueue: string[] = []
   readonly consumed: string[] = []
   readonly calls: string[] = []
+  // Messages an input extension handles, so pi never queues them.
+  readonly handledByExtension = new Set<string>()
 
   async steer(message: string, attachments: unknown[] = []): Promise<'queued' | 'handled'> {
     this.steers.push({ message, attachments })
+    if (this.handledByExtension.has(message)) return 'handled'
     this.steeringQueue.push(message)
     return 'queued'
   }
