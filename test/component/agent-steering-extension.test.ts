@@ -75,38 +75,23 @@ test('startup and settlement gaps request a trackable prompt instead of queueing
   await running
 })
 
-test('idle client opt-in requests a normal prompt', async () => {
-  const { agent, proc } = setup()
-  assert.deepEqual(
-    await agent.extMethod('_session/steering', {
-      ...steeringParams,
-      _meta: { steering: { idleBehavior: 'promptRequired' } }
-    }),
-    { outcome: 'promptRequired', reason: 'noRunningTurn' }
-  )
+test('idle steering without metadata requests a normal prompt, including after settlement', async () => {
+  const { agent, proc, session } = setup()
+  const promptRequired = { outcome: 'promptRequired', reason: 'noRunningTurn' }
+
+  assert.deepEqual(await agent.extMethod('_session/steering', steeringParams), promptRequired)
   assert.equal(proc.prompts.length, 0)
-})
 
-test('idle steering starts a new turn and waits for Pi prompt acceptance', async () => {
-  const { agent, proc } = setup()
-  let acceptPrompt: (() => void) | undefined
-  proc.prompt = async (message, attachments = []) => {
-    proc.prompts.push({ message, attachments })
-    await new Promise<void>(resolve => {
-      acceptPrompt = resolve
-    })
-  }
+  const running = session.prompt('Original request')
+  proc.emit({ type: 'agent_start' })
+  proc.emit({ type: 'agent_end' })
+  proc.emit({ type: 'agent_settled' })
+  assert.deepEqual(await agent.extMethod('_session/steering', steeringParams), promptRequired)
+  await running
 
-  let responded = false
-  const response = agent.extMethod('_session/steering', steeringParams).then(result => {
-    responded = true
-    return result
-  })
-  await new Promise(resolve => setImmediate(resolve))
-  assert.equal(responded, false)
-  assert.deepEqual(proc.prompts, [{ message: 'Change direction', attachments: [] }])
-  acceptPrompt?.()
-  assert.deepEqual(await response, { outcome: 'startedNewTurn' })
+  assert.deepEqual(await agent.extMethod('_session/steering', steeringParams), promptRequired)
+  assert.deepEqual(proc.prompts, [{ message: 'Original request', attachments: [] }])
+  assert.equal(proc.steers.length, 0)
 })
 
 test('Pi rejection does not acknowledge delivery', async () => {
@@ -121,14 +106,6 @@ test('Pi rejection does not acknowledge delivery', async () => {
   proc.emit({ type: 'agent_end' })
   proc.emit({ type: 'agent_settled' })
   await running
-})
-
-test('idle prompt rejection does not acknowledge delivery', async () => {
-  const { agent, proc } = setup()
-  proc.prompt = async () => {
-    throw new Error('prompt rejected')
-  }
-  await assert.rejects(agent.extMethod('_session/steering', steeringParams), /prompt rejected/)
 })
 
 test('invalid extension calls fail without contacting Pi', async () => {

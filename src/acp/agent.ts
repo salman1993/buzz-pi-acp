@@ -319,17 +319,7 @@ export class PiAcpAgent implements ACPAgent {
       return { outcome: 'injected' }
     }
 
-    const meta = params._meta as { steering?: { idleBehavior?: string } } | undefined
-    if (session.hasPendingTurn || meta?.steering?.idleBehavior === 'promptRequired') {
-      return { outcome: 'promptRequired', reason: 'noRunningTurn' }
-    }
-
-    try {
-      await session.startDetachedPrompt(message, images)
-    } catch (error) {
-      throw RequestError.internalError({}, error instanceof Error ? error.message : String(error))
-    }
-    return { outcome: 'startedNewTurn' }
+    return { outcome: 'promptRequired', reason: 'noRunningTurn' }
   }
 
   async newSession(params: NewSessionRequest) {

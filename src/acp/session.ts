@@ -51,7 +51,6 @@ type QueuedTurn = {
   images: unknown[]
   resolve: (reason: StopReason) => void
   reject: (err: unknown) => void
-  accepted?: { resolve: () => void; reject: (err: unknown) => void }
 }
 
 type PermissionResponse = Awaited<ReturnType<AgentSideConnection['requestPermission']>>
@@ -298,10 +297,6 @@ export class PiAcpSession {
   // completes only when `agent_settled` is emitted.
   private inAgentLoop = false
 
-  get hasPendingTurn(): boolean {
-    return this.pendingTurn !== null
-  }
-
   get hasActiveAgentLoop(): boolean {
     return this.pendingTurn !== null && this.inAgentLoop && !this.cancelRequested
   }
@@ -392,21 +387,6 @@ export class PiAcpSession {
     })
 
     return turnPromise
-  }
-
-  async startDetachedPrompt(message: string, images: unknown[] = []): Promise<void> {
-    if (this.pendingTurn) throw new Error('Cannot start a new prompt while a turn is pending')
-
-    const expandedMessage = expandSlashCommand(message, this.fileCommands)
-    await new Promise<void>((resolve, reject) => {
-      this.startTurn({
-        message: expandedMessage,
-        images,
-        resolve: () => {},
-        reject: () => {},
-        accepted: { resolve, reject }
-      })
-    })
   }
 
   async cancel(): Promise<void> {
@@ -523,35 +503,31 @@ export class PiAcpSession {
     // Kick off pi, but completion is determined by pi events, not the RPC response.
     // The prompt RPC only acknowledges acceptance; retry, compaction, or queued
     // continuations may emit multiple `agent_end` events before `agent_settled`.
-    this.proc
-      .prompt(t.message, t.images)
-      .then(() => t.accepted?.resolve())
-      .catch(err => {
-        t.accepted?.reject(err)
-        // If the subprocess errors before we get `agent_settled`, treat as error unless cancelled.
-        // Also ensure we flush any already-enqueued updates first.
-        void this.flushEmits().finally(() => {
-          // If this looks like an auth/config issue, surface AUTH_REQUIRED so clients can offer terminal login.
-          const authErr = maybeAuthRequiredError(err)
-          if (authErr) {
-            this.pendingTurn?.reject(authErr)
-          } else {
-            const reason: StopReason = this.cancelRequested ? 'cancelled' : 'error'
-            this.pendingTurn?.resolve(reason)
-          }
+    this.proc.prompt(t.message, t.images).catch(err => {
+      // If the subprocess errors before we get `agent_settled`, treat as error unless cancelled.
+      // Also ensure we flush any already-enqueued updates first.
+      void this.flushEmits().finally(() => {
+        // If this looks like an auth/config issue, surface AUTH_REQUIRED so clients can offer terminal login.
+        const authErr = maybeAuthRequiredError(err)
+        if (authErr) {
+          this.pendingTurn?.reject(authErr)
+        } else {
+          const reason: StopReason = this.cancelRequested ? 'cancelled' : 'error'
+          this.pendingTurn?.resolve(reason)
+        }
 
-          this.pendingTurn = null
-          this.inAgentLoop = false
+        this.pendingTurn = null
+        this.inAgentLoop = false
 
-          // If the prompt failed, do not automatically proceed—pi may be unhealthy.
-          // But we still clear the queueDepth metadata.
-          this.emit({
-            sessionUpdate: 'session_info_update',
-            _meta: { piAcp: { queueDepth: this.turnQueue.length, running: false } }
-          })
+        // If the prompt failed, do not automatically proceed—pi may be unhealthy.
+        // But we still clear the queueDepth metadata.
+        this.emit({
+          sessionUpdate: 'session_info_update',
+          _meta: { piAcp: { queueDepth: this.turnQueue.length, running: false } }
         })
-        void err
       })
+      void err
+    })
   }
 
   private handlePiEvent(ev: PiRpcEvent) {
