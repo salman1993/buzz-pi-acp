@@ -892,9 +892,6 @@ var PiAcpSession = class {
   // when retry, compaction, or queued continuations run. The session-level prompt
   // completes only when `agent_settled` is emitted.
   inAgentLoop = false;
-  get hasPendingTurn() {
-    return this.pendingTurn !== null;
-  }
   get hasActiveAgentLoop() {
     return this.pendingTurn !== null && this.inAgentLoop && !this.cancelRequested;
   }
@@ -956,21 +953,6 @@ var PiAcpSession = class {
       this.startTurn(queued);
     });
     return turnPromise;
-  }
-  async startDetachedPrompt(message, images = []) {
-    if (this.pendingTurn) throw new Error("Cannot start a new prompt while a turn is pending");
-    const expandedMessage = expandSlashCommand(message, this.fileCommands);
-    await new Promise((resolve4, reject) => {
-      this.startTurn({
-        message: expandedMessage,
-        images,
-        resolve: () => {
-        },
-        reject: () => {
-        },
-        accepted: { resolve: resolve4, reject }
-      });
-    });
   }
   async cancel() {
     this.cancelRequested = true;
@@ -1046,8 +1028,7 @@ var PiAcpSession = class {
       sessionUpdate: "session_info_update",
       _meta: { piAcp: { queueDepth: this.turnQueue.length, running: true } }
     });
-    this.proc.prompt(t.message, t.images).then(() => t.accepted?.resolve()).catch((err) => {
-      t.accepted?.reject(err);
+    this.proc.prompt(t.message, t.images).catch((err) => {
       void this.flushEmits().finally(() => {
         const authErr = maybeAuthRequiredError(err);
         if (authErr) {
@@ -2143,16 +2124,7 @@ var PiAcpAgent = class {
       }
       return { outcome: "injected" };
     }
-    const meta = params._meta;
-    if (session.hasPendingTurn || meta?.steering?.idleBehavior === "promptRequired") {
-      return { outcome: "promptRequired", reason: "noRunningTurn" };
-    }
-    try {
-      await session.startDetachedPrompt(message, images);
-    } catch (error) {
-      throw RequestError4.internalError({}, error instanceof Error ? error.message : String(error));
-    }
-    return { outcome: "startedNewTurn" };
+    return { outcome: "promptRequired", reason: "noRunningTurn" };
   }
   async newSession(params) {
     const systemPrompt = parseSystemPrompt(params._meta?.systemPrompt);
